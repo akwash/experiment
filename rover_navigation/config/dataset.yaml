@@ -1,0 +1,48 @@
+# Filename: dataset.yaml
+# Author: AK Wash
+# Created: 2026-03-10
+# Description: configuration describing the structure of the LiDAR datasets used
+# for training/evaluating the model
+
+# defines:
+# - dataset paths
+# - pcl feature structure
+# - label column indices
+# - param for sampling and preprocessing
+# - class definitions
+
+# each point contains: xyz coordinates, multiple scalar fields, label 
+# field representing annotated class
+dataset:
+  name: "cloudcompare_rover_dataset"
+
+paths:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  test_file: "data/test_cloud.ply"
+
+point_cloud:
+  format: "cloudcompare_binary_ply"
+  xyz_columns: [0, 1, 2]
+  total_scalar_fields: 6
+  label_scalar_index: 5
+  feature_scalar_indices: [0, 1, 2, 3, 4]
+
+classes:
+  0: "class_0"
+  1: "class_1"
+  2: "class_2"
+  3: "class_3"
+  4: "class_4"
+
+preprocessing:
+  center_cloud: true
+  normalize_xyz: true
+  normalize_features: true
+  num_points: 8192
+
+sampling:
+  k_n: 16
+  num_layers: 4
+  sub_sampling_ratio: [4, 4, 4, 4]
+  d_out: [16, 64, 128, 256]

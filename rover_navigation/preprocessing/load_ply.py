@@ -1,27 +1,28 @@
-import numpy as np
+# Filename: load_ply.py
+# Author: AK Wash
+# Created: 2026-03-10
 
-def load_cloudcompare_ply(path):
+# Description: loads the CloudCompare binary ply files. Reads the 
+# file and extracts: 
+# - 3D point coords
+# - scalar field vals
+#   - intensity
+#   - segmentation ID
+#   - annotation labels
+#   - metadata fields
 
-    with open(path, "rb") as f:
+# returns two arrays:
+# - points -> shape (N,3)
+# - scalars -> shape (N,S)
 
-        header = []
-        while True:
-            line = f.readline().decode("utf-8").strip()
-            header.append(line)
-            if line == "end_header":
-                break
+# used in: preprocessing
+from pathlib import Path
+from typing import Any
 
-        # find number of vertices
-        vertex_count = None
-        for line in header:
-            if line.startswith("element vertex"):
-                vertex_count = int(line.split()[-1])
+import yaml
 
-        data = np.fromfile(f, dtype=np.float32)
 
-    data = data.reshape(vertex_count, 9)
-
-    points = data[:, :3]
-    scalars = data[:, 3:]
-
-    return points, scalars
+def load_yaml(path: str | Path) -> dict[str, Any]:
+    path = Path(path)
+    with path.open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f)

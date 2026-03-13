@@ -1,9 +1,14 @@
+import os
 from preprocessing.load_ply import load_cloudcompare_ply
 
-points, scalars = load_cloudcompare_ply("data/test_cloud.ply")
 
-print("points:", points.shape)
-print("scalar fields:", scalars.shape)
+def test_load_cloudcompare_ply_shapes():
+    test_path = os.path.join("data", "test_cloud.ply")
+    points, scalars = load_cloudcompare_ply(test_path)
 
-print(points[:5])
-print(scalars[:5])
+    assert points.ndim == 2
+    assert points.shape[1] == 3
+
+    assert scalars.ndim == 2
+    assert scalars.shape[0] == points.shape[0]
+    assert scalars.shape[1] == 6
