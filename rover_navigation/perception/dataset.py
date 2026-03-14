@@ -23,11 +23,6 @@
 # used by: perception/train.py, perception/infer.py
 
 import os
-import sys
-
-print("Hello World!")
-
-import os
 from typing import Any
 
 import numpy as np

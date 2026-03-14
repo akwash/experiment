@@ -1,0 +1,39 @@
+Project Overview:
+
+Goal: Build a python based LiDAR obstacle detection and 
+path planning stack.
+
+Pipeline:
+1. Load annoted .ply point clouds
+2. Preprocess dataset and conver to processed dataset format
+3. Train RandLA-Net in Pytorch for semantic segmentation
+4. Infer obstacle labels on in-situ scans
+5. Convert labeled points to a 2D cost map
+6. Run D* Lite on the grid
+7. Output path for rover navigation
+
+Directory structure:
+- config/
+- data/raw
+- data/processed
+- perception/
+- planning/
+- preprocessing/
+- rover/
+- tests/
+
+Directory structure:
+- config/
+- data/raw
+- data/processed
+- perception/
+- planning/
+- preprocessing/
+- rover/
+- tests/
+
+Important rules:
+- Keep perception separate from planning
+- Use configs instead of hardcoded paths
+- Prefer small, testable functions
+- Use type hints and docstrings
