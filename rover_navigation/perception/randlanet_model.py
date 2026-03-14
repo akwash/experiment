@@ -28,18 +28,19 @@ import torch.nn.functional as F
 from perception.randlanet_blocks import DilatedResidualBlock, SharedMLP1d, index_points
 from util.config_loader import load_yaml
 
-
+# random sampling and nearest neighbor interpolation for encoder/decoder
 def random_sample(features: torch.Tensor, pool_idx: torch.Tensor) -> torch.Tensor:
     """
     features: (B, C, N)
     pool_idx: (B, M, K)
     returns:  (B, C, M)
     """
+    # neighbor features for each subsampled point
     neighbor_features = index_points(features.permute(0, 2, 1), pool_idx)  # (B, M, K, C)
     neighbor_features = neighbor_features.max(dim=2)[0]                     # (B, M, C)
     return neighbor_features.permute(0, 2, 1)                              # (B, C, M)
 
-
+# nearest neighbor interpolation for decoder
 def nearest_interpolation(features: torch.Tensor, interp_idx: torch.Tensor) -> torch.Tensor:
     """
     features:  (B, C, M)
@@ -50,17 +51,20 @@ def nearest_interpolation(features: torch.Tensor, interp_idx: torch.Tensor) -> t
     interpolated = interpolated.squeeze(2)                                  # (B, N, C)
     return interpolated.permute(0, 2, 1)                                    # (B, C, N)
 
-
+# main RandLA-Net model class
+# input: dataset and training config paths for model parameters
 class RandLANet(nn.Module):
     def __init__(self, dataset_config_path: str = "config/dataset.yaml", training_config_path: str = "config/training.yaml"):
         super().__init__()
 
+        # load conig param
         dataset_cfg = load_yaml(dataset_config_path)
         training_cfg = load_yaml(training_config_path)
 
         sampling_cfg = dataset_cfg["sampling"]
         model_cfg = training_cfg["model"]
 
+        # extract model param
         self.num_layers = int(sampling_cfg["num_layers"])
         self.d_out = list(sampling_cfg["d_out"])
         self.input_dim = int(model_cfg["input_dim"])
@@ -68,6 +72,8 @@ class RandLANet(nn.Module):
 
         self.fc_start = SharedMLP1d(self.input_dim, 8)
 
+        # define encoder channels
+        # first layer is eight channels, then channels defined by d_out list in config
         encoder_channels = [8] + self.d_out
         self.encoder = nn.ModuleList(
             [
@@ -76,8 +82,10 @@ class RandLANet(nn.Module):
             ]
         )
 
+        # bottleneck layer with same output channels as last encoder layer
         self.bottleneck = SharedMLP1d(self.d_out[-1], self.d_out[-1])
 
+        # define decoder channels
         decoder_in_channels = [256, 128, 64, 32]
         decoder_skip_channels = [128, 64, 16, 8]
         decoder_out_channels = [128, 64, 32, 32]
@@ -89,27 +97,32 @@ class RandLANet(nn.Module):
             ]
         )
 
+        # final classifier layers
         self.classifier = nn.Sequential(
             SharedMLP1d(32, 32),
             nn.Dropout(p=0.5),
             nn.Conv1d(32, self.num_classes, kernel_size=1),
         )
 
+    # forward pass through network
     def forward(self, batch: dict[str, torch.Tensor | list[torch.Tensor]]) -> torch.Tensor:
-        features = batch["features"]  # (B, N, C)
-        xyz_list = batch["xyz"]
-        neigh_idx_list = batch["neigh_idx"]
-        sub_idx_list = batch["sub_idx"]
-        interp_idx_list = batch["interp_idx"]
+        features = batch["features"]  # (B, N, C) input features (xyz + other features)
+        xyz_list = batch["xyz"] # xyz coords for each layer
+        neigh_idx_list = batch["neigh_idx"] # neighbor indices for each layer
+        sub_idx_list = batch["sub_idx"] # subsampling indices for each layer
+        interp_idx_list = batch["interp_idx"] # interpol indices for each layer
 
+        # check the input dimensions
         if features.ndim != 3:
             raise ValueError(f"Expected features shape (B, N, C), got {features.shape}")
 
+        # intial feature transformation
         x = features.permute(0, 2, 1)  # (B, C, N)
         x = self.fc_start(x)
 
-        skip_features = []
+        skip_features = [] # store features for skip connection in decoder
 
+        # encoder with random sampling and feature learning
         for i in range(self.num_layers):
             xyz = xyz_list[i]
             neigh_idx = neigh_idx_list[i]
@@ -119,8 +132,10 @@ class RandLANet(nn.Module):
             skip_features.append(x)
             x = random_sample(x, sub_idx)
 
+        
         x = self.bottleneck(x)
 
+        # decoder with nearest neighbor interpolation and skip connections
         for i in range(self.num_layers - 1, -1, -1):
             interp_idx = interp_idx_list[i]
             x = nearest_interpolation(x, interp_idx)
@@ -128,6 +143,7 @@ class RandLANet(nn.Module):
             dec_idx = self.num_layers - 1 - i
             x = self.decoder[dec_idx](x)
 
+        # final classifer for per-point semantic prediction
         logits = self.classifier(x)      # (B, num_classes, N)
         logits = logits.permute(0, 2, 1) # (B, N, num_classes)
         return logits

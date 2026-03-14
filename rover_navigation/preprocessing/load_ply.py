@@ -19,10 +19,14 @@
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml 
 
-
+# load function for yaml files, used to read the metadata fields from the ply files
+# input: path or string
+# output: dictionary with string keys and values
 def load_yaml(path: str | Path) -> dict[str, Any]:
-    path = Path(path)
+    path = Path(path) # if given string convert to path object
+
+    # open file at math in read mode, automatically close after
     with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        return yaml.safe_load(f) # convert yaml to python objects

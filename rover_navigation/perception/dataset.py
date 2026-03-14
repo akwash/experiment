@@ -32,22 +32,30 @@ from torch.utils.data import Dataset
 
 from util.config_loader import load_yaml
 
-
+# helper function to normalize point coords
+# input: (N,3) point cloud
+# output: (N,#) normalized point cloud
 def _normalize_points(points: np.ndarray) -> np.ndarray:
-    centered = points - np.mean(points, axis=0, keepdims=True)
-    scale = np.max(np.linalg.norm(centered, axis=1))
+    centered = points - np.mean(points, axis=0, keepdims=True) # center the point cloud
+    # scale the point cloud (furthest point has norm 1)
+    scale = np.max(np.linalg.norm(centered, axis=1)) 
     if scale > 0:
         centered = centered / scale
     return centered.astype(np.float32)
 
-
+# helper function to normalize feature values
+# input: (N,F) feature matrix
+# output: (N,F) normalzied feature matrix
 def _normalize_features(features: np.ndarray) -> np.ndarray:
-    mean = np.mean(features, axis=0, keepdims=True)
-    std = np.std(features, axis=0, keepdims=True)
+    mean = np.mean(features, axis=0, keepdims=True) # mean for each feature column
+    std = np.std(features, axis=0, keepdims=True) # std for each feature column
     std[std < 1e-6] = 1.0
     return ((features - mean) / std).astype(np.float32)
 
-
+# function for sample without replacement if enough points exist, otherwise sample all points
+# and then duplicate to reach target account. (Fixed size batches for training)
+# input: total number of points, target number of points
+# output: array of indices for sampling
 def _random_sample_indices(num_points_total: int, num_points_target: int) -> np.ndarray:
     if num_points_total >= num_points_target:
         return np.random.choice(num_points_total, num_points_target, replace=False)
@@ -55,85 +63,108 @@ def _random_sample_indices(num_points_total: int, num_points_target: int) -> np.
     base = np.arange(num_points_total)
     return np.concatenate([base, extra], axis=0)
 
-
+# knn search to find the neighborhood indices for each point. Used for building the RandLa-Net hierarchy.
+# input: query points (N,3), support points (M,3), number of neighbors (k)
+# output: (N,k) array of neighbor indices for each query point
 def _knn_indices(query_pts: np.ndarray, support_pts: np.ndarray, k: int) -> np.ndarray:
     nbrs = NearestNeighbors(n_neighbors=k, algorithm="auto")
     nbrs.fit(support_pts)
     _, indices = nbrs.kneighbors(query_pts)
-    return indices.astype(np.int64)
+    return indices.astype(np.int64) 
 
-
+# initalize classdataset, loads .npz files and prepares batches for RandLa-Net training
 class RandLANetDataset(Dataset):
+    # store directory and load dataset config from the yaml file
     def __init__(self, data_dir: str, dataset_config_path: str = "config/dataset.yaml"):
         self.data_dir = data_dir
         self.dataset_cfg = load_yaml(dataset_config_path)
 
+        # extract the preprocessing and sampling parameters
         prep_cfg = self.dataset_cfg["preprocessing"]
         sampling_cfg = self.dataset_cfg["sampling"]
 
-        self.num_points = int(prep_cfg["num_points"])
-        self.center_cloud = bool(prep_cfg["center_cloud"])
-        self.normalize_xyz = bool(prep_cfg["normalize_xyz"])
-        self.normalize_features = bool(prep_cfg["normalize_features"])
+        
+        self.num_points = int(prep_cfg["num_points"]) # number of points to sample
+        self.center_cloud = bool(prep_cfg["center_cloud"]) # decide if point cloud is centered at the origin
+        self.normalize_xyz = bool(prep_cfg["normalize_xyz"]) # decide if points are normalized
+        self.normalize_features = bool(prep_cfg["normalize_features"]) # decide if features are normalized
 
-        self.k_n = int(sampling_cfg["k_n"])
-        self.num_layers = int(sampling_cfg["num_layers"])
-        self.sub_sampling_ratio = list(sampling_cfg["sub_sampling_ratio"])
+        self.k_n = int(sampling_cfg["k_n"]) # number of neighbors for the search
+        self.num_layers = int(sampling_cfg["num_layers"]) # number of layers in RandLA-Net heirarchy
+        self.sub_sampling_ratio = list(sampling_cfg["sub_sampling_ratio"]) # subsampling ratio of layers
 
+        # collect all .npz files in directory
         self.files = sorted(
             os.path.join(data_dir, f)
             for f in os.listdir(data_dir)
             if f.endswith(".npz")
         )
 
+        # check if dataset is empty
         if not self.files:
             raise ValueError(f"No .npz files found in {data_dir}")
 
+    # return number of samples in the dataset
     def __len__(self) -> int:
         return len(self.files)
 
+    # build the RandLa-Net hierarchy by neighborhood indices, subsampling, and interpolation indices for the layers
     def _build_hierarchy(self, xyz: np.ndarray) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
+        # lists for per-layer data
         xyz_layers: list[np.ndarray] = []
         neigh_idx_layers: list[np.ndarray] = []
         sub_idx_layers: list[np.ndarray] = []
         interp_idx_layers: list[np.ndarray] = []
 
+        # starting with full point cloud
         current_xyz = xyz.copy()
 
+        # loop over layers
         for layer_idx in range(self.num_layers):
-            xyz_layers.append(current_xyz)
+            xyz_layers.append(current_xyz) # store current layer coords
 
+            # knn for this layer
             neigh_idx = _knn_indices(current_xyz, current_xyz, self.k_n)
             neigh_idx_layers.append(neigh_idx)
 
+            # how many points to keep after subsampling
             ratio = self.sub_sampling_ratio[layer_idx]
             num_sub = max(1, current_xyz.shape[0] // ratio)
 
+            # randomly subsample points
             sampled_indices = np.random.choice(current_xyz.shape[0], num_sub, replace=False)
             sampled_xyz = current_xyz[sampled_indices]
 
+            # subsampling indices
             sub_idx = neigh_idx[sampled_indices]
             sub_idx_layers.append(sub_idx.astype(np.int64))
 
+            # interpolation index (for upsampling)
             interp_idx = _knn_indices(current_xyz, sampled_xyz, 1)
             interp_idx_layers.append(interp_idx.astype(np.int64))
 
-            current_xyz = sampled_xyz
+            current_xyz = sampled_xyz # move to the next layer
 
         return xyz_layers, neigh_idx_layers, sub_idx_layers, interp_idx_layers
 
+    # get sample from dataset, apply preprocessing, prepare for RandLa-Net use
+    # input: index of sample
+    # output: dictionary with features, labels, and hierarchy data for the sample
     def __getitem__(self, idx: int) -> dict[str, Any]:
         sample = np.load(self.files[idx])
 
+        # extract arrays
         points = sample["points"].astype(np.float32)      # (N, 3)
         features = sample["features"].astype(np.float32)  # (N, F)
         labels = sample["labels"].astype(np.int64)        # (N,)
 
+        #make sure there is a fixed number of points per sample
         sampled_idx = _random_sample_indices(points.shape[0], self.num_points)
         points = points[sampled_idx]
         features = features[sampled_idx]
         labels = labels[sampled_idx]
 
+        # center and normalize
         if self.center_cloud:
             points = points - np.mean(points, axis=0, keepdims=True)
 
@@ -147,6 +178,9 @@ class RandLANetDataset(Dataset):
 
         xyz_layers, neigh_idx_layers, sub_idx_layers, interp_idx_layers = self._build_hierarchy(points)
 
+        # convert to tensors and return batch dictionary
+        # dictionary contains: input features, labels, layer coords, layer neighbor indices, 
+        # subsampling indices, interpolation indices
         batch = {
             "features": torch.tensor(input_features, dtype=torch.float32),   # (N, C)
             "labels": torch.tensor(labels, dtype=torch.long),                # (N,)

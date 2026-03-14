@@ -24,17 +24,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
+# util function for moving the batch to the device
+# input: batch dictionary and device
 def index_points(points: torch.Tensor, idx: torch.Tensor) -> torch.Tensor:
     """
     points: (B, N, C)
     idx:    (B, M, K) or (B, M, 1)
     returns: (B, M, K, C)
     """
+    # extract the dimensions
     b, n, c = points.shape
     _, m, k = idx.shape
 
-    idx_expanded = idx.unsqueeze(-1).expand(-1, -1, -1, c)
+    idx_expanded = idx.unsqueeze(-1).expand(-1, -1, -1, c) 
     points_expanded = points.unsqueeze(1).expand(-1, m, -1, -1)
     gathered = torch.gather(points_expanded, 2, idx_expanded)
     return gathered
