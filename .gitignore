@@ -14,6 +14,9 @@ checkpoints/
 # processed data
 data/processed/
 
+# raw data
+data/raw/
+
 # OS files
 .DS_Store
 Thumbs.db

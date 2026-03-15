@@ -1,73 +1,83 @@
 import numpy as np
+from util.utils import get_movements_4n, get_movements_8n, heuristic, Vertices, Vertex
+from typing import Dict, List
+
+OBSTACLE = 255
+UNOCCUPIED = 0
+
 
 class OccupancyGridMap:
-    def __init(self, x_dim, y_dim, exploration_setting='8N'):
+    def __init__(self, x_dim, y_dim, exploration_setting='8N'):
         """
-        set intial vals for the occupancy grid
-        :param x_dim: dimension in x-direction
-        :param y_dim: dimension in y-direction
+        set initial values for the map occupancy grid
+        |----------> y, column
+        |           (x=0,y=2)
+        |
+        V (x=2, y=0)
+        x, row
+        :param x_dim: dimension in the x direction
+        :param y_dim: dimension in the y direction
         """
-        # these are in meters
         self.x_dim = x_dim
         self.y_dim = y_dim
+
+        # the map extents in units [m]
         self.map_extents = (x_dim, y_dim)
 
-        # 0 is unoccupied, 1 is occupied, 2 is unknown
+        # the obstacle map
         self.occupancy_grid_map = np.zeros(self.map_extents, dtype=np.uint8)
 
         # obstacles
         self.visited = {}
         self.exploration_setting = exploration_setting
 
-        # get occupancy map
-        def get_map(self):
-            """
-            : return: current occpancy of map
-            """
-            return self.occupancy_grid_map
-        
-        # set occupancy map
-        def set_map(self,new_ogrid):
-            """
-            :param new_ogrid: new occupancy grid to set
-            :return: none
-            """
-            self.occupancy_grid_map = new_ogrid
-        
-        # check if cell is unoccupied
-        def is_unoccupied(self, pos: (int,int)) -> bool:
-            """
-            :param pos: cell position to be checked
-            :return: true if occupied, false if free
-            """
-            (x,y) = (round(pos[0]), round(pos[1]))
-            (row, col) = (x,y)
+    def get_map(self):
+        """
+        :return: return the current occupancy grid map
+        """
+        return self.occupancy_grid_map
 
-            return self.occupancy_grid_map[row][col] == 0
-        
-        # check if cell is within the bounds
-        def in_bounds(self,cell: (int,int)) -> bool:
-            """
-            check if the coords are within the bounds fo the  grid map.
-            :param cell: cell position (x,y)
-            :return: true if within, false if outside
-            """
-            (x,y) = cell
-            return 0 <= x < self.x_dim and 0 <= y < self.y_dim
-        
-        # 
-        def filter(self, neighbors: List, avoid_obstacles: bool):
-            """
-            :param neighbors: list of potential neighbors before filtering
-            :param avoid_obstacles: if true, filter out obstacle cells
-            :return:
-            """
-            if avoid_obstacles:
-                return [node for node in neighbors if self.in_bounds(node) and self.is_unoccupied(node)]
-            return [node for node in neighbors if self.in_bounds(node)]
+    def set_map(self, new_ogrid):
+        """
+        :param new_ogrid:
+        :return: None
+        """
+        self.occupancy_grid_map = new_ogrid
 
-        # 
-        def succ(self, vertex: (int, int), avoid_obstacles: bool = False) -> list:
+    def is_unoccupied(self, pos: (int, int)) -> bool:
+        """
+        :param pos: cell position we wish to check
+        :return: True if cell is occupied with obstacle, False else
+        """
+        (x, y) = (round(pos[0]), round(pos[1]))  # make sure pos is int
+        (row, col) = (x, y)
+
+        # if not self.in_bounds(cell=(x, y)):
+        #    raise IndexError("Map index out of bounds")
+
+        return self.occupancy_grid_map[row][col] == UNOCCUPIED
+
+    def in_bounds(self, cell: (int, int)) -> bool:
+        """
+        Checks if the provided coordinates are within
+        the bounds of the grid map
+        :param cell: cell position (x,y)
+        :return: True if within bounds, False else
+        """
+        (x, y) = cell
+        return 0 <= x < self.x_dim and 0 <= y < self.y_dim
+
+    def filter(self, neighbors: List, avoid_obstacles: bool):
+        """
+        :param neighbors: list of potential neighbors before filtering
+        :param avoid_obstacles: if True, filter out obstacle cells in the list
+        :return:
+        """
+        if avoid_obstacles:
+            return [node for node in neighbors if self.in_bounds(node) and self.is_unoccupied(node)]
+        return [node for node in neighbors if self.in_bounds(node)]
+
+    def succ(self, vertex: (int, int), avoid_obstacles: bool = False) -> list:
         """
         :param avoid_obstacles:
         :param vertex: vertex you want to find direct successors from
@@ -170,6 +180,3 @@ class SLAM:
                     vertices.add_vertex(v)
                     self.slam_map.remove_obstacle(node)
         return vertices
-
-        
-
