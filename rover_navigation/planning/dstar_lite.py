@@ -1,6 +1,6 @@
 import numpy as np
 from planning.priority_queue import PriorityQueue, Priority
-from mapping.grid_map import OccupancyGridMap
+from mapping.occupancy_map import OccupancydMap
 from util.utils import heuristic, Vertex, Vertices
 from typing import Dict, List
 

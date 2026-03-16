@@ -1,7 +1,7 @@
-from mapping.grid_map import OccupancyGridMap, SLAM, OBSTACLE, UNOCCUPIED
+from mapping.occupancy_map import OccupancyMap, SLAM, OBSTACLE, UNOCCUPIED
 
 def test_rescan_updates_slam():
-    gt = OccupancyGridMap(5,5)
+    gt = OccupancyMap(5,5)
     gt.set_obstacle((2,2))
 
     slam = SLAM(gt, view_range = 1)
