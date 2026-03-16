@@ -9,6 +9,6 @@ def test_in_bounds():
 
 def test_is_unoccupied():
     m = OccupancyMap(5,5)
-    m.occupancy_occupancy_map[2,2] = OBSTACLE
+    m.occupancy_map[2,2] = OBSTACLE
     assert m.is_unoccupied((1,1))
     assert not m.is_unoccupied((2,2))

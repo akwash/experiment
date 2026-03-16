@@ -25,7 +25,7 @@ class OccupancyMap:
 
         # set the obstacles (known by visiting cells)
         self.visited = {} # set to no visited cells
-        self.movement_Setting = movement_setting # decide how to traverse
+        self.movement_setting = movement_setting # decide how to traverse
 
     def get_map(self):
         """
@@ -136,6 +136,8 @@ class SLAM:
         self.truth_map = map # true map of environment
         self.slam_map = OccupancyMap(x_dim=map.x_dim, y_dim=map.y_dim)
 
+        self.slam_map.occupancy_map = map.occupancy_map.copy()
+
         self.view_range = view_range
 
     def set_ground_map(self, g_map: OccupancyMap):
@@ -180,7 +182,7 @@ class SLAM:
         for node, value in local_grid.items():
             # if there is an obstacle in new observations
             if value == OBSTACLE:
-                if self.slam_map.is_unoccupoed(node):
+                if self.slam_map.is_unoccupied(node):
                     v = Vertex(pos=node)
                     succ = self.slam_map.successor(node)
                     for u in succ:
@@ -196,7 +198,7 @@ class SLAM:
                         vertices.add_vertex(v)
                         self.slam_map.remove_obstacle(node)
 
-        return Vertices
+        return vertices
     
         
     
