@@ -1,6 +1,6 @@
 import numpy as np
 from util.utils import get_movements_4n, get_movements_8n, heuristic, Vertices, Vertex
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 # set values for occupied and unoccupied cells in the map
 OBSTACLE = 255 
@@ -40,7 +40,9 @@ class OccupancyMap:
         """
         self.occupancy_map = new_omap
 
-    def in_bounds(self, cell: (int, int)) -> bool:
+    cell = tuple(int, int)
+
+    def in_bounds(self, cell) -> bool:
         """
         check if the cell is within the map boundaries
         :param cell: cell position to check (x,y)
@@ -49,7 +51,9 @@ class OccupancyMap:
         (x,y) = cell 
         return 0 <= x < self.x_dim and 0 <= y < self.y_dim
     
-    def is_unoccupied(self, pos: (int, int)) -> bool:
+    pos = tuple(int, int)
+
+    def is_unoccupied(self, pos) -> bool:
         """
         check if a cell is unoccupied
         :param pos: cell position to check (x,y)
@@ -76,7 +80,9 @@ class OccupancyMap:
         
         return [node for node in neighbors if self.in_bounds(node)] # filter out out of bounds
     
-    def succesors(self, vertex: (int, int), avoid_obstacles: bool = False) -> list:
+    vertex = tuple(int, int)
+
+    def succesors(self, vertex, avoid_obstacles: bool = False) -> list:
         """
         get the successors of a cell (sucessors are neighbors cells that can be reached)
         :param vertex: cell to find successors for 
@@ -97,7 +103,7 @@ class OccupancyMap:
         filtered_movements = self.filter(neighbors = movements, avoid_obstacles=avoid_obstacles) # filter out movements that cause out of bounds and occupied cells
         return list(filtered_movements)
     
-    def set_obstacles(self, pos: (int,int)):
+    def set_obstacles(self, pos):
         """
         :param pos: cell position to set as an obstacle (x,y)
         :return: None
@@ -107,7 +113,7 @@ class OccupancyMap:
 
         self.occupancy_map[row][col] = OBSTACLE # set cell as an obstacle
 
-    def remove_obstacle(self, pos: (int,int)):
+    def remove_obstacle(self, pos):
         """
         :param pos: cell position to set as an obstacle (x,y)
         :return: None
@@ -117,7 +123,7 @@ class OccupancyMap:
 
         self.occupancy_map[row][col] = UNOCCUPIED # set cell as unoccupied
 
-    def observations(self, global_pos: (int, int), view_range = int =2 ) -> Dict:
+    def observations(self, global_pos, view_range = int =2 ) -> Dict:
         """
         :param global_pos: current global position of system (x,y)
         :param view_range: how far can the system see in each direction
@@ -147,7 +153,10 @@ class SLAM:
         """
         self.set_ground_map = g_map
 
-    def cost(self, u: (int, int), v: (int, int)) -> float:
+    u = tuple(int, int)
+    v = tuple(int, int)
+
+    def cost(self, u, v) -> float:
         """
         calculate the cost between two nodes
         :param u: from vertex
@@ -159,7 +168,9 @@ class SLAM:
         else: 
             return heuristic(u,v) # otherwise, cost is heuristic distance
         
-    def rescan(self, global_pos: (int, int)):
+    global_pos = tuple(int, int)
+
+    def rescan(self, global_pos):
         """
         rescan the area around curr position and update SLAM
         :param global_pos: current global position (x,y)
