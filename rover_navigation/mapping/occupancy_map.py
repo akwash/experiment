@@ -40,7 +40,7 @@ class OccupancyMap:
         """
         self.occupancy_map = new_omap
 
-    cell = tuple(int, int)
+    cell = tuple[int, int]
 
     def in_bounds(self, cell) -> bool:
         """
@@ -51,7 +51,7 @@ class OccupancyMap:
         (x,y) = cell 
         return 0 <= x < self.x_dim and 0 <= y < self.y_dim
     
-    pos = tuple(int, int)
+    pos = tuple[int, int]
 
     def is_unoccupied(self, pos) -> bool:
         """
@@ -80,7 +80,7 @@ class OccupancyMap:
         
         return [node for node in neighbors if self.in_bounds(node)] # filter out out of bounds
     
-    vertex = tuple(int, int)
+    vertex = tuple[int, int]
 
     def succesors(self, vertex, avoid_obstacles: bool = False) -> list:
         """
@@ -123,7 +123,7 @@ class OccupancyMap:
 
         self.occupancy_map[row][col] = UNOCCUPIED # set cell as unoccupied
 
-    def observations(self, global_pos, view_range = int =2 ) -> Dict:
+    def observations(self, global_pos: cell, view_range: int = 2) -> Dict:
         """
         :param global_pos: current global position of system (x,y)
         :param view_range: how far can the system see in each direction
@@ -153,8 +153,8 @@ class SLAM:
         """
         self.set_ground_map = g_map
 
-    u = tuple(int, int)
-    v = tuple(int, int)
+    u = tuple[int, int]
+    v = tuple[int, int]
 
     def cost(self, u, v) -> float:
         """
@@ -168,7 +168,7 @@ class SLAM:
         else: 
             return heuristic(u,v) # otherwise, cost is heuristic distance
         
-    global_pos = tuple(int, int)
+    global_pos = tuple[int, int]
 
     def rescan(self, global_pos):
         """
@@ -176,9 +176,9 @@ class SLAM:
         :param global_pos: current global position (x,y)
         """
 
-        local_observation = self.truth_map.observations(global_pos=global_po, view_range = self.view_range) # get local observations
+        local_observation = self.truth_map.observations(global_pos=global_pos, view_range = self.view_range) # get local observations
         
-        vertices = self.update_changed_edge_costs(local_grid = observations) # update the SLAM map with new observations and get the vertices that changed from unoccupied to occupied or vice versa
+        vertices = self.update_changed_edge_costs(local_grid = local_observation) # update the SLAM map with new observations and get the vertices that changed from unoccupied to occupied or vice versa
         return vertices, self.slam_map
     
     def update_changed_edge_costs(self, local_grid: Dict) -> Vertices:
