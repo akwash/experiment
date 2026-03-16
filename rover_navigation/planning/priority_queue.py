@@ -1,3 +1,29 @@
+"""
+g(s) - current best known path cost from the start to s
+rhs(s) - one-step lookahead cost 
+
+algorithim wants g(s) = rhs(s)
+
+if g(s) != rhs(s), must process the states
+- for deciding which states each state gets two keys
+- h(start,s) <-- heuristic 
+- k_m <-- running modifier
+
+start with smallest k1 (state that is closest to the goal),
+if k1 ties, smallest k2 (raw best known cost)
+
+three cases
+(1) g(s) > rhs(s)
+- overconsistent (g too high), decrease g to match rhs
+(2) g(s) < rhs(s) 
+- (g too low), increase g
+(3) g(s) = rhs(s)
+- desired condition, don't need to process
+
+lexicographic: (a1,a2) < (b1,b2) if a1 > b1 or a1 = b1 and a2 < b2
+"""
+
+
 class Priority:
     """
     handle order of keys
