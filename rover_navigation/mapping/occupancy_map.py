@@ -1,6 +1,6 @@
 import numpy as np
 from util.utils import get_movements_4n, get_movements_8n, heuristic, Vertices, Vertex
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 # set values for occupied and unoccupied cells in the map
 OBSTACLE = 255 
