@@ -58,4 +58,4 @@ def load_cloudcompare_ply(path: str | Path):
         else:
             scalars = np.empty((points.shape[0],0))
 
-        return points, scalars
+    return points, scalars
