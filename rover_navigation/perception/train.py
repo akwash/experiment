@@ -11,6 +11,7 @@
 # 5. Save trained model checkpoints
 
 # output: trained model weights saved to the checkpoints directory
+# adapted from: https://github.com/aRI0U/RandLA-Net-pytorch
 import os
 from pathlib import Path
 
@@ -18,8 +19,8 @@ import torch
 from torch.utils.data import DataLoader
 
 from perception.dataset import RandLANetDataset
-from perception.randlanet_model import RandLANet
 from util.config_loader import load_yaml
+from perception.model import MyRandLANet
 
 
 def collate_fn(batch: list[dict]) -> dict:
