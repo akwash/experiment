@@ -1,4 +1,4 @@
-from mapping.occupancy_map import OccupancyMap, SLAM, OBSTACLE
+from rover_navigation.mapping.occupancy_map import OccupancyMap, SLAM, OBSTACLE
 import math
 
 def test_cost_free():

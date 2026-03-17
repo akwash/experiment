@@ -1,5 +1,5 @@
 import os
-from preprocessing.load_ply import load_cloudcompare_ply
+from rover_navigation.preprocessing.load_ply import load_cloudcompare_ply
 
 
 def test_load_cloudcompare_ply_shapes():

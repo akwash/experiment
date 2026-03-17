@@ -1,0 +1,194 @@
+import numpy as np
+from rover_navigation.perception.dataset import RandLANetDataset
+from rover_navigation.util.config_loader import load_yaml
+import pytest
+
+def test_dataset_init_finds_npz_files(tmp_path):
+    data_dir = tmp_path / "data"
+    config_dir = tmp_path / "config"
+    data_dir.mkdir()
+    config_dir.mkdir()
+
+    np.savez_compressed(
+        data_dir / "sample1.npz",
+        points=np.random.rand(8,3).astype(np.float32),
+        features=np.random.rand(8,2).astype(np.float32),
+        labels=np.random.randint(0,3, size=(8,), dtype=np.int64)
+    )
+
+    config_path = config_dir / "dataset.yaml"
+    config_path.write_text(
+        """
+preprocessing:
+  num_points: 8
+  center_cloud: true
+  normalize_xyz: true
+  normalize_features: true
+sampling:
+  k_n: 2
+  num_layers: 2
+  sub_sampling_ratio: [2, 2]
+""".strip()
+    )
+    
+    ds = RandLANetDataset(str(data_dir), str(config_path))
+
+    assert len(ds) == 1
+
+def test_dataset_init_raises_on_empty_directory(tmp_path):
+    data_dir = tmp_path / "data"
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    data_dir.mkdir()
+
+    config_path = config_dir / "dataset.yaml"
+    config_path.write_text(
+        """
+preprocessing:
+  num_points: 8
+  center_cloud: true
+  normalize_xyz: true
+  normalize_features: true
+sampling:
+  k_n: 2
+  num_layers: 2
+  sub_sampling_ratio: [2, 2]
+""".strip()
+    )
+
+    with pytest.raises(ValueError, match="No .npz files found"):
+        RandLANetDataset(str(data_dir), str(config_path))
+
+
+def test_dataset_getitem_returns_expected_structure(tmp_path):
+    import torch
+    from rover_navigation.perception.dataset import RandLANetDataset
+
+    data_dir = tmp_path / "data"
+    config_dir = tmp_path / "config"
+    data_dir.mkdir()
+    config_dir.mkdir()
+
+    np.savez_compressed(
+        data_dir / "sample1.npz",
+        points=np.random.rand(16, 3).astype(np.float32),
+        features=np.random.rand(16, 2).astype(np.float32),
+        labels=np.random.randint(0, 3, size=(16,), dtype=np.int64),
+    )
+
+    config_path = config_dir / "dataset.yaml"
+    config_path.write_text(
+        """
+preprocessing:
+  num_points: 8
+  center_cloud: true
+  normalize_xyz: true
+  normalize_features: true
+sampling:
+  k_n: 2
+  num_layers: 2
+  sub_sampling_ratio: [2, 2]
+""".strip()
+    )
+
+    ds = RandLANetDataset(str(data_dir), str(config_path))
+    batch = ds[0]
+
+    assert set(batch.keys()) == {
+        "features", "labels", "xyz", "neigh_idx", "sub_idx", "interp_idx"
+    }
+
+    assert isinstance(batch["features"], torch.Tensor)
+    assert isinstance(batch["labels"], torch.Tensor)
+
+    assert batch["features"].shape == (8, 5)  # 3 xyz + 2 features
+    assert batch["labels"].shape == (8,)
+    assert len(batch["xyz"]) == 2
+    assert len(batch["neigh_idx"]) == 2
+    assert len(batch["sub_idx"]) == 2
+    assert len(batch["interp_idx"]) == 2
+
+def test_dataset_getitem_upsamples_small_cloud(tmp_path):
+    from rover_navigation.perception.dataset import RandLANetDataset
+
+    data_dir = tmp_path / "data"
+    config_dir = tmp_path / "config"
+    data_dir.mkdir()
+    config_dir.mkdir()
+
+    np.savez_compressed(
+        data_dir / "sample1.npz",
+        points=np.random.rand(4, 3).astype(np.float32),
+        features=np.random.rand(4, 2).astype(np.float32),
+        labels=np.random.randint(0, 3, size=(4,), dtype=np.int64),
+    )
+
+    config_path = config_dir / "dataset.yaml"
+    config_path.write_text(
+        """
+preprocessing:
+  num_points: 8
+  center_cloud: false
+  normalize_xyz: false
+  normalize_features: false
+sampling:
+  k_n: 2
+  num_layers: 2
+  sub_sampling_ratio: [2, 2]
+""".strip()
+    )
+
+    ds = RandLANetDataset(str(data_dir), str(config_path))
+    batch = ds[0]
+
+    assert batch["features"].shape[0] == 8
+    assert batch["labels"].shape[0] == 8
+
+def test_build_hierarchy_shapes(tmp_path):
+    from rover_navigation.perception.dataset import RandLANetDataset
+
+    data_dir = tmp_path / "data"
+    config_dir = tmp_path / "config"
+    data_dir.mkdir()
+    config_dir.mkdir()
+
+    np.savez_compressed(
+        data_dir / "sample1.npz",
+        points=np.random.rand(16, 3).astype(np.float32),
+        features=np.random.rand(16, 2).astype(np.float32),
+        labels=np.random.randint(0, 3, size=(16,), dtype=np.int64),
+    )
+
+    config_path = config_dir / "dataset.yaml"
+    config_path.write_text(
+        """
+preprocessing:
+  num_points: 16
+  center_cloud: false
+  normalize_xyz: false
+  normalize_features: false
+sampling:
+  k_n: 2
+  num_layers: 2
+  sub_sampling_ratio: [2, 2]
+""".strip()
+    )
+
+    ds = RandLANetDataset(str(data_dir), str(config_path))
+    batch = ds[0]
+
+    for xyz in batch["xyz"]:
+        assert xyz.ndim == 2
+        assert xyz.shape[1] == 3
+
+    for neigh in batch["neigh_idx"]:
+        assert neigh.ndim == 2
+        assert neigh.shape[1] == 2
+
+    for sub in batch["sub_idx"]:
+        assert sub.ndim == 2
+        assert sub.shape[1] == 2
+
+    for interp in batch["interp_idx"]:
+        assert interp.ndim == 2
+        assert interp.shape[1] == 1

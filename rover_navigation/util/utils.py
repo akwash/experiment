@@ -26,7 +26,7 @@ class Vertices:
         self.list.append(v)
 
     @property 
-    def vertices(Self):
+    def vertices(self):
         return self.list
 
 # euclidian distance between two points on the grid

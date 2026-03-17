@@ -1,12 +1,12 @@
 import numpy as np
 from planning.priority_queue import PriorityQueue, Priority
-from mapping.occupancy_map import OccupancydMap
+from mapping.occupancy_map import OccupancyMap
 from util.utils import heuristic, Vertex, Vertices
 from typing import Dict, List
 
 class DStarLite:
     
-    def __init__(self, map, OccupancyGridMap, s_start:(int, int),s_goal:(int, int)):
+    def __init__(self, map, OccupancyMap, s_start:(int, int),s_goal:(int, int)):
         """
         :param map: ground truth map of environment
         :param s_start: start location
@@ -24,9 +24,9 @@ class DStarLite:
         self.g = self.rhs.copy() # g values for all states
 
         # map:
-        self.sensed_map = OccupancyGridMap(x_dim=map.x_dim,
+        self.sensed_map = OccupancyMap(x_dim=map.x_dim,
                                             y_dim=map.y_dim,
-                                            exploration_setting='8N')
+                                            movement_setting='8N')
         
         self.rhs[self.s_goal] = 0 # rhs of goal is 0
         self.U.insert(self.s_goal, Priority(heuristic(self.s_start, self.s_goal), 0)) # goal into priority queue w/ heuristic as priority

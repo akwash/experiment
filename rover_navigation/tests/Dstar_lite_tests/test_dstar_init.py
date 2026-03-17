@@ -1,6 +1,6 @@
 import numpy as np
-from planning.dstar_lite import DStarLite
-from mapping.occupancy_map import OccupancyMap, OBSTACLE, UNOCCUPIED
+from rover_navigation.planning.dstar_lite import DStarLite
+from rover_navigation.mapping.occupancy_map import OccupancyMap, OBSTACLE, UNOCCUPIED
 
 def test_dstar_init():
     m = OccupancyMap(5,5)

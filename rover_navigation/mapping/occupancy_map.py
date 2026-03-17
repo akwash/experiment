@@ -1,5 +1,5 @@
 import numpy as np
-from util.utils import get_movements_4n, get_movements_8n, heuristic, Vertices, Vertex
+from rover_navigation.util.utils import get_movements_4n, get_movements_8n, heuristic, Vertices, Vertex
 from typing import Dict, List
 
 # set values for occupied and unoccupied cells in the map
@@ -151,7 +151,7 @@ class SLAM:
         set the ground truth map for SLAM
         :param: g_map: new ground truth map
         """
-        self.set_ground_map = g_map
+        self.truth_map_map = g_map
 
     u = tuple[int, int]
     v = tuple[int, int]
@@ -182,32 +182,25 @@ class SLAM:
         return vertices, self.slam_map
     
     def update_changed_edge_costs(self, local_grid: Dict) -> Vertices:
-        """
-        update SLAM map with new observations and get changed vertices
-        :param local_grid: new local observations
-        :param vertices: list of vertices that changed
-        :return: list of vertices that changed
-        """
         vertices = Vertices()
-        
+
         for node, value in local_grid.items():
-            # if there is an obstacle in new observations
             if value == OBSTACLE:
                 if self.slam_map.is_unoccupied(node):
                     v = Vertex(pos=node)
-                    succ = self.slam_map.successor(node)
+                    succ = self.slam_map.successors(node)
                     for u in succ:
-                        v.add_edge_with_cost(succ=u, cost=self.cost(u,v.pos))
+                        v.add_edge_with_cost(succ=u, cost=self.cost(u, v.pos))
                     vertices.add_vertex(v)
                     self.slam_map.set_obstacles(node)
-                else:
-                    if not self.slam_map.is_unoccupied(node):
-                        v = Vertex(pos=node)
-                        succ = self.slam_map.successor(node)
-                        for u in succ:
-                            v.add_edge_with_cost(succ=u, cost=self.cost(u,v.pos))
-                        vertices.add_vertex(v)
-                        self.slam_map.remove_obstacle(node)
+            else:
+                if not self.slam_map.is_unoccupied(node):
+                    v = Vertex(pos=node)
+                    succ = self.slam_map.successors(node)
+                    for u in succ:
+                        v.add_edge_with_cost(succ=u, cost=self.cost(u, v.pos))
+                    vertices.add_vertex(v)
+                    self.slam_map.remove_obstacle(node)
 
         return vertices
     

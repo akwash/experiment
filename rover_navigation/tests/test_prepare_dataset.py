@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from preprocessing.load_ply import load_cloudcompare_ply
+from rover_navigation.preprocessing.load_ply import load_cloudcompare_ply
 
 
 LABEL_COLUMN = 5

@@ -1,4 +1,4 @@
-from mapping.occupancy_map import OccupancyMap, OBSTACLE, UNOCCUPIED
+from rover_navigation.mapping.occupancy_map import OccupancyMap, OBSTACLE, UNOCCUPIED
 
 def test_in_bounds():
     m = OccupancyMap(5,5)
