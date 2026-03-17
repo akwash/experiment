@@ -82,7 +82,7 @@ class OccupancyMap:
     
     vertex = tuple[int, int]
 
-    def succesors(self, vertex, avoid_obstacles: bool = False) -> list:
+    def successors(self, vertex, avoid_obstacles: bool = False) -> list:
         """
         get the successors of a cell (sucessors are neighbors cells that can be reached)
         :param vertex: cell to find successors for 

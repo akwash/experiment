@@ -12,9 +12,6 @@ class Vertex:
         if succ != self.pos:
             self.edges_and_costs[succ] = cost
     
-    @property
-    def edges_and_costs(self):
-        return self.edges_and_costs
 
 # container for multiple points on the grid
 class Vertices:
