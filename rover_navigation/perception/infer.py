@@ -20,10 +20,10 @@
 import numpy as np
 import torch
 
-from preprocessing.load_ply import load_cloudcompare_ply
-from util.config_loader import load_yaml
-from perception.randlanet_model import RandLANet
-from perception.dataset import _normalize_features, _normalize_points, _knn_indices
+from rover_navigation.preprocessing.load_ply import load_cloudcompare_ply
+from rover_navigation.util.config_loader import load_yaml
+from rover_navigation.perception.randlanet_model import RandLANet
+from rover_navigation.perception.dataset import _normalize_features, _normalize_points, _knn_indices
 
 # build input batch for inference
 # input: ply file path, dataset config

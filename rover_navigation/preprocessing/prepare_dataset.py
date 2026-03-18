@@ -21,8 +21,8 @@ from pathlib import Path
 
 import numpy as np
 
-from preprocessing.load_ply import load_cloudcompare_ply
-from util.config_loader import load_yaml
+from rover_navigation.preprocessing.load_ply import load_cloudcompare_ply
+from rover_navigation.util.config_loader import load_yaml
 
 # input: raw .ply, output path, label_column
 # output: saves the processed dataset as a compressed .npz file

@@ -30,7 +30,7 @@ import torch
 from sklearn.neighbors import NearestNeighbors
 from torch.utils.data import Dataset
 
-from util.config_loader import load_yaml
+from rover_navigation.util.config_loader import load_yaml
 
 # helper function to normalize point coords
 # input: (N,3) point cloud

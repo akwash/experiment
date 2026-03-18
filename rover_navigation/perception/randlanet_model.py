@@ -25,8 +25,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from perception.randlanet_blocks import DilatedResidualBlock, SharedMLP1d, index_points
-from util.config_loader import load_yaml
+from rover_navigation.perception.randlanet_blocks import DilatedResidualBlock, SharedMLP1d, index_points
+from rover_navigation.util.config_loader import load_yaml
 
 # random sampling and nearest neighbor interpolation for encoder/decoder
 def random_sample(features: torch.Tensor, pool_idx: torch.Tensor) -> torch.Tensor:

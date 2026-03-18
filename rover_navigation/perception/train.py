@@ -18,9 +18,9 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from perception.dataset import RandLANetDataset
-from util.config_loader import load_yaml
-from perception.model import MyRandLANet
+from rover_navigation.perception.dataset import RandLANetDataset
+from rover_navigation.util.config_loader import load_yaml
+from rover_navigation.perception.model import MyRandLANet
 
 
 def collate_fn(batch: list[dict]) -> dict:

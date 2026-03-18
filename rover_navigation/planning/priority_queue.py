@@ -101,7 +101,7 @@ class PriorityQueue:
         pop smallest from heap, maintain heap invariant
         """
         lastelt = self.heap.pop()  # raises appropriate IndexError if heap is empty
-        self.vertices_in_heap.remove(lastelt)
+        self.vertices_in_heap.remove(lastelt.vertex)
         if self.heap:
             returnitem = self.heap[0]
             self.heap[0] = lastelt

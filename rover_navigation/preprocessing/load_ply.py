@@ -56,7 +56,7 @@ def load_cloudcompare_ply(path: str | Path):
     # RGB features
     features = None 
     if all(name in field_names for name in ("red", "green", "blue")):
-        features = np.vstac([
+        features = np.vstack([
             vertex["red"],
             vertex["green"],
             vertex["blue"]

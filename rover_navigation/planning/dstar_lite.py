@@ -1,7 +1,7 @@
 import numpy as np
-from planning.priority_queue import PriorityQueue, Priority
-from mapping.occupancy_map import OccupancyMap
-from util.utils import heuristic, Vertex, Vertices
+from rover_navigation.planning.priority_queue import PriorityQueue, Priority
+from rover_navigation.mapping.occupancy_map import OccupancyMap
+from rover_navigation.util.utils import heuristic, Vertex, Vertices
 from typing import Dict, List
 
 class DStarLite:
