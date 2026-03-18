@@ -29,6 +29,10 @@ def test_load_cloudcompare_ply_shapes_2():
     test_path = os.path.join("data", "test_cloud.ply")
     points, scalars = load_cloudcompare_ply(test_path)
 
+    print("\n--- PLY HEADER ---")
+    print_ply_header(test_path)
+    print("--- END HEADER ---\n")
+
     assert points.ndim == 2
     assert points.shape[1] == 3
 

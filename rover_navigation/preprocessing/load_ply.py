@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 from plyfile import PlyData
 import numpy as np
-
 import yaml 
 
 # load function for yaml files, used to read the metadata fields from the ply files
@@ -45,17 +44,27 @@ def load_cloudcompare_ply(path: str | Path):
 
     ply = PlyData.read(str(path))
     vertex = ply["vertex"].data
+    field_names = vertex.dtype.names
 
-    points = np.vstack([vertex["x"], vertex["y"], vertex["z"]]).T # xyz vals
+    # coordiantes
+    points = np.vstack([
+        vertex["x"], 
+        vertex["y"], 
+        vertex["z"]
+        ]).T.astype(np.float32) # xyz vals
+    
+    # RGB features
+    features = None 
+    if all(name in field_names for name in ("red", "green", "blue")):
+        features = np.vstac([
+            vertex["red"],
+            vertex["green"],
+            vertex["blue"]
+        ]).T.astype(np.float32)
 
-    scalar_fields = []
-    for name in vertex.dtype.names:
-        if name not in ("x", "y", "z"):
-            scalar_fields.append(vertex[name])
-
-        if scalar_fields:
-            scalars = np.vstack(scalar_fields).T
-        else:
-            scalars = np.empty((points.shape[0],0))
-
-    return points, scalars
+    # labels
+    labels = None 
+    if "scalar_label" in field_names:
+        labels = np.asarray(vertex["scalar_label"]).astype(np.int32)
+                                                    
+    return points, features, labels
