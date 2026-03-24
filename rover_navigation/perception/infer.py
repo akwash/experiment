@@ -32,11 +32,46 @@ from rover_navigation.perception.dataset import (
     _knn_indices,
 )
 
+from rover_navigation.rover.csv_loader import load_csv_point_cloud
+
 # build paths relative to this file so code works no matter where it is run from
 ROOT = Path(__file__).resolve().parents[1]
 DATASET_CONFIG = ROOT / "config" / "dataset.yaml"
 TRAINING_CONFIG = ROOT / "config" / "training.yaml"
 
+def load_point_cloud_for_inference(
+        input_path: str | Path,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    either load in the ply or csv
+    - ply is the annotated training point clouds
+    - csv is the in situ collected point cloud
+
+    :param input_path: the path to the file
+    :return points: (N,3)
+    :return features: (N,F)
+    :return labels: (N,) <- there is a dummy label of -1 for the csv
+    """
+    input_path = Path(input_path)
+
+    if not input_path.exists():
+        raise FileNotFoundError(f"Input file not found: {input_path}")
+    
+    suffix = input_path.suffix.lower()
+
+    if suffix == ".ply":
+        points, features, labels = load_cloudcompare_ply(input_path)
+        return points, features, labels
+    
+    if suffix == '.csv':
+        points, features = load_csv_point_cloud(input_path)
+        labels = np.full(points.shape[0],-1, dtype=np.int64)
+        return points, features, labels
+    
+    raise ValueError(
+        f"Unsupported input file type: {input_path.suffix}."
+        f"Expected .ply or .csv"
+    )
 
 # build input batch for inference
 # input: ply file path, dataset config
@@ -62,7 +97,7 @@ def build_inference_batch(
     sub_sampling_ratio = list(sampling_cfg["sub_sampling_ratio"])
 
     # load point cloud data
-    points, features, labels = load_cloudcompare_ply(ply_path)
+    points, features, labels = load_point_cloud_for_inference(ply_path)
 
     # keep a copy of sampled points before normalization for nicer visualization
     if points.shape[0] >= num_points:
@@ -85,13 +120,14 @@ def build_inference_batch(
     if normalize_xyz:
         points = _normalize_points(points)
 
-    if normalize_features:
-        features = _normalize_features(features)
-    else:
-        if np.max(features) > 1.0:
-            features = features / 255.0
+    if features.shape[1] > 0:
+        if normalize_features:
+            features = _normalize_features(features)
+        else:
+            if np.max(features) > 1.0:
+                features = features / 255.0
 
-    # input matrix shape (N, 6) -> xyz + rgb
+    # input matrix shape (N, 3) -> xyz
     input_features = np.concatenate([points, features], axis=1).astype(np.float32)
 
     # one list per layer (hierarchical RandLA-Net structure)
