@@ -204,6 +204,28 @@ class SLAM:
                     self.slam_map.remove_obstacle(node)
 
         return vertices
+    def inflate(self, radius: int = 1):
+        """
+        Inflate obstacles to account for rover size / safety margin
+        :param radius: number of grid cells to expand obstacles
+        """
+        grid = self.occupancy_map
+        h, w = grid.shape
+
+        new_grid = grid.copy()
+
+        obstacle_cells = np.argwhere(grid == OBSTACLE)
+
+        for row, col in obstacle_cells:
+            for dr in range(-radius, radius + 1):
+                for dc in range(-radius, radius + 1):
+                    rr = row + dr
+                    cc = col + dc
+
+                    if 0 <= rr < h and 0 <= cc < w:
+                        new_grid[rr, cc] = OBSTACLE
+
+        self.occupancy_map = new_grid
     
 def build_map_from_predictions(
             points:np.ndarray,
@@ -252,7 +274,11 @@ def build_map_from_predictions(
         counts = {}
 
         for r, c in zip(rows, cols):
-            counts[(r, c)] = counts.get((r, c), 0) + 1
+            counts[(c, r)] = counts.get((c, r), 0) + 1
+
+        for (x, y), count in counts.items():
+            if count >= 2:
+                omap.set_obstacles((x, y))
 
         for (r, c), count in counts.items():
             if count >= 2:
@@ -266,3 +292,13 @@ def build_map_from_predictions(
 
         return omap, grid_info
     
+def world_to_grid(x: float, y: float, grid_info: dict) -> tuple[int, int]:
+    col = int((x - grid_info["min_x"]) / grid_info["resolution"])
+    row = int((y - grid_info["min_y"]) / grid_info["resolution"])
+    return col, row
+
+
+def grid_to_world(x_idx: int, y_idx: int, grid_info: dict) -> tuple[float, float]:
+    x = grid_info["min_x"] + x_idx * grid_info["resolution"]
+    y = grid_info["min_y"] + y_idx * grid_info["resolution"]
+    return x, y
