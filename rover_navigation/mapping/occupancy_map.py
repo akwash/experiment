@@ -137,6 +137,28 @@ class OccupancyMap:
                  if self.in_bounds((x, y))]
 
         return {node: UNOCCUPIED if self.is_unoccupied(pos=node) else OBSTACLE for node in nodes}
+    def inflate(self, radius: int = 1):
+        """
+        Inflate obstacles to account for rover size / safety margin
+        :param radius: number of grid cells to expand obstacles
+        """
+        grid = self.occupancy_map
+        h, w = grid.shape
+
+        new_grid = grid.copy()
+
+        obstacle_cells = np.argwhere(grid == OBSTACLE)
+
+        for row, col in obstacle_cells:
+            for dr in range(-radius, radius + 1):
+                for dc in range(-radius, radius + 1):
+                    rr = row + dr
+                    cc = col + dc
+
+                    if 0 <= rr < h and 0 <= cc < w:
+                        new_grid[rr, cc] = OBSTACLE
+
+        self.occupancy_map = new_grid
     
 class SLAM:
     def __init__(self, map: OccupancyMap, view_range: int):
@@ -204,28 +226,6 @@ class SLAM:
                     self.slam_map.remove_obstacle(node)
 
         return vertices
-    def inflate(self, radius: int = 1):
-        """
-        Inflate obstacles to account for rover size / safety margin
-        :param radius: number of grid cells to expand obstacles
-        """
-        grid = self.occupancy_map
-        h, w = grid.shape
-
-        new_grid = grid.copy()
-
-        obstacle_cells = np.argwhere(grid == OBSTACLE)
-
-        for row, col in obstacle_cells:
-            for dr in range(-radius, radius + 1):
-                for dc in range(-radius, radius + 1):
-                    rr = row + dr
-                    cc = col + dc
-
-                    if 0 <= rr < h and 0 <= cc < w:
-                        new_grid[rr, cc] = OBSTACLE
-
-        self.occupancy_map = new_grid
     
 def build_map_from_predictions(
             points:np.ndarray,

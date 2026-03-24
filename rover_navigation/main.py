@@ -13,36 +13,114 @@
 
 from pathlib import Path
 import numpy as np
+import matplotlib.pyplot as plt
 
 from rover_navigation.util.config_loader import load_yaml
-from rover_navigation.planning.run_navigation import run_navigation
+from rover_navigation.perception.infer import run_inference
+from rover_navigation.mapping.occupancy_map import (
+    build_map_from_predictions,
+    world_to_grid,
+)
+from rover_navigation.planning.dstar_lite import DStarLite
+
 
 # create the file paths so that it doesnt matter where its run from
 ROOT = Path(__file__).resolve().parent
 DATASET_CONFIG = ROOT / "config" / "dataset.yaml"
 
-def main() -> None
+
+def main() -> None:
     # load the dataset configuration
     dataset_cfg = load_yaml(DATASET_CONFIG)
     ply_path = dataset_cfg["paths"]["test_file"]
 
+    print(f"\nUsing point cloud: {ply_path}")
+
     # rover start and goal in the world coordiantes (meters)
     # NEED TO UPDATE FOR ACTUAL MAP
-    rover_pose_xy = (0.0,0.0)
-    goal_pose_xy = (5.0,5.0)
+    rover_pose_xy = (0.0, 0.0)
+    goal_pose_xy = (5.0, 5.0)
 
-    # navigation pipeline
-    path = run_navigation(
-        ply_path=ply_path,
-        rover_pose_xy=rover_pose_xy
-        goal_pose_xy=goal_pose_xy,
+    # ==========================================
+    # 1. Run semantic segmentation using RandLA-Net
+    # ==========================================
+    print("\nRunning RandLA-Net inference...")
+    points, true_labels, pred_labels = run_inference(ply_path)
+
+    print("Inference complete.")
+    print(f"Total points: {len(points)}")
+    print(f"Unique predicted labels: {np.unique(pred_labels)}")
+
+    # ==========================================
+    # 2. Build occupancy map from predictions
+    # ==========================================
+    print("\nBuilding occupancy map...")
+    truth_map, grid_info = build_map_from_predictions(
+        points,
+        pred_labels,
+        grid_resolution=0.10,
+        obstacle_label=1,
     )
 
-    print("\nNativgation Complete.")
+    # inflate obstacles for rover safety margin
+    truth_map.inflate(radius=2)
+
+    grid = truth_map.get_map()
+
+    print(f"Grid shape: {grid.shape}")
+    print(f"Obstacle cells: {np.sum(grid == 255)}")
+
+    # ==========================================
+    # 3. Convert start and goal into grid cells
+    # ==========================================
+    start = world_to_grid(rover_pose_xy[0], rover_pose_xy[1], grid_info)
+    goal = world_to_grid(goal_pose_xy[0], goal_pose_xy[1], grid_info)
+
+    print(f"Start (grid): {start}")
+    print(f"Goal (grid): {goal}")
+
+    # ==========================================
+    # 4. Run D* Lite planner
+    # ==========================================
+    print("\nRunning D* Lite planning...")
+    planner = DStarLite(map=truth_map, s_start=start, s_goal=goal)
+    path, g, rhs = planner.move_and_replan(robot_position=start)
+
+    print("Planning complete.")
     print(f"Path length: {len(path)}")
-    print("PathL")
+
+    # ==========================================
+    # 5. Visualize occupancy map and path
+    # ==========================================
+    print("\nVisualizing results...")
+    path_np = np.array(path)
+
+    plt.figure(figsize=(8, 6))
+    plt.imshow(grid, cmap="gray")
+
+    # plot path
+    plt.plot(path_np[:, 0], path_np[:, 1], "r-", linewidth=2, label="Path")
+
+    # plot start and goal
+    plt.scatter(path_np[0, 0], path_np[0, 1], c="green", s=80, label="Start")
+    plt.scatter(path_np[-1, 0], path_np[-1, 1], c="blue", s=80, label="Goal")
+
+    plt.title("Occupancy Grid + Planned Path")
+    plt.xlabel("X (grid)")
+    plt.ylabel("Y (grid)")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    # ==========================================
+    # 6. Print path
+    # ==========================================
+    print("\nNavigation Complete.")
+    print(f"Path length: {len(path)}")
+    print("Path:")
     for step in path:
         print(step)
+
 
 if __name__ == "__main__":
     main()
