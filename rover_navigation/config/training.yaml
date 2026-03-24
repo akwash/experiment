@@ -14,8 +14,8 @@
 
 model:
   name: "randlanet"
-  input_dim: 8
-  num_classes: 5
+  input_dim: 3
+  num_classes: 2
 
 training:
   batch_size: 2

@@ -5,10 +5,9 @@
 # Description: prepares dataset, converts the raw '.ply' files
 # into a "training" ready dataset for the model
 
-# 1. Loads the point cloud 
-# 2. seperates the scalar fields into input features and albels
-# 3. extracts the annotation label
-# 4. save processed data into the compressed .npz file
+# 1. Loads the point cloud
+# 2. extracts the annotation label
+# 3. saves processed data into the compressed .npz file
 
 # output files contain:
 # points -> (N,3) XYZ coordinates
@@ -16,7 +15,7 @@
 # labels -> (N,) class labels
 
 # used in: data/processed and dataset loader
-import os
+
 from pathlib import Path
 
 import numpy as np
@@ -24,29 +23,41 @@ import numpy as np
 from rover_navigation.preprocessing.load_ply import load_cloudcompare_ply
 from rover_navigation.util.config_loader import load_yaml
 
-# input: raw .ply, output path, label_column
+
+# input: raw .ply, output path
 # output: saves the processed dataset as a compressed .npz file
 def prepare_one_file(
-    input_path: str,
-    output_path: str,
-    label_column: int,
+    input_path: str | Path,
+    output_path: str | Path,
+    dataset_config_path: str | Path = "rover_navigation/config/dataset.yaml",
 ) -> None:
-    # load in the two numpy arrays from the .ply file
-    points, scalars = load_cloudcompare_ply(input_path)
+    # load in the numpy arrays from the .ply file
+    points, features, labels = load_cloudcompare_ply(
+        input_path,
+        dataset_config_path=dataset_config_path,
+    )
 
-    # cheeck that it is a 2D matrix
-    if scalars.ndim != 2:
-        raise ValueError(f"Expected scalars to be 2D, got shape {scalars.shape}")
+    # check shapes
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError(f"Expected points shape (N, 3), got {points.shape}")
 
-    # check that the label column index is valid
-    if label_column < 0 or label_column >= scalars.shape[1]:
+    if features.ndim != 2:
+        raise ValueError(f"Expected features shape (N, F), got {features.shape}")
+
+    if labels.ndim != 1:
+        raise ValueError(f"Expected labels shape (N,), got {labels.shape}")
+
+    if not (len(points) == len(features) == len(labels)):
         raise ValueError(
-            f"Label column {label_column} is out of bounds for scalars with shape {scalars.shape}"
+            f"Length mismatch: points={len(points)}, features={len(features)}, labels={len(labels)}"
         )
 
-    labels = scalars[:, label_column].astype(np.int64) # get label column and convert to integer class label
-    feature_cols = [i for i in range(scalars.shape[1]) if i != label_column] # seperate the feature columns from the label column
-    features = scalars[:, feature_cols].astype(np.float32) # convert features to float32
+    # make sure labels are binary obstacle / non-obstacle
+    unique_labels = np.unique(labels)
+    if not np.all(np.isin(unique_labels, [0, 1])):
+        raise ValueError(
+            f"Expected binary labels in {{0,1}}, got {unique_labels.tolist()}"
+        )
 
     # create output directory
     out_dir = Path(output_path).parent
@@ -56,28 +67,44 @@ def prepare_one_file(
     np.savez_compressed(
         output_path,
         points=points.astype(np.float32),
-        features=features,
-        labels=labels,
+        features=features.astype(np.float32),
+        labels=labels.astype(np.int64),
     )
+
 
 # load in the configuration yaml for dataset
 def main() -> None:
-    dataset_cfg = load_yaml("config/dataset.yaml")
+    dataset_cfg = load_yaml("rover_navigation/config/dataset.yaml")
 
-    paths_cfg = dataset_cfg["paths"] # input/output path
-    pc_cfg = dataset_cfg["point_cloud"] # label index
+    paths_cfg = dataset_cfg["paths"]  # input/output path
 
-    input_path = paths_cfg["test_file"] # which file to process
-    processed_dir = paths_cfg["processed_dir"] # save processed file here
-    label_column = pc_cfg["label_scalar_index"] # which scalar field is the label
+    raw_dir = Path(paths_cfg["raw_dir"])               # folder containing raw .ply files
+    processed_dir = Path(paths_cfg["processed_dir"])   # save processed files here
 
-    # file naming
-    file_stem = Path(input_path).stem
-    output_path = os.path.join(processed_dir, f"{file_stem}.npz")
+    if not raw_dir.exists():
+        raise FileNotFoundError(f"Raw data directory not found: {raw_dir}")
 
-    # run processing, confirm saved file
-    prepare_one_file(input_path, output_path, label_column)
-    print(f"Saved processed dataset to {output_path}")
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
+    # find all .ply files in raw directory
+    ply_files = sorted(raw_dir.glob("*.ply"))
+
+    if not ply_files:
+        raise ValueError(f"No .ply files found in {raw_dir}")
+
+    print(f"Found {len(ply_files)} .ply file(s) in {raw_dir}")
+
+    # process each file
+    for input_path in ply_files:
+        file_stem = input_path.stem
+        output_path = processed_dir / f"{file_stem}.npz"
+
+        prepare_one_file(
+            input_path,
+            output_path,
+            dataset_config_path="rover_navigation/config/dataset.yaml",
+        )
+        print(f"Saved processed dataset to {output_path}")
 
 
 if __name__ == "__main__":

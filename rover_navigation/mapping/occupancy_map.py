@@ -27,6 +27,7 @@ class OccupancyMap:
         self.visited = {} # set to no visited cells
         self.movement_setting = movement_setting # decide how to traverse
 
+
     def get_map(self):
         """
         :return: return the current occupancy map
@@ -61,7 +62,7 @@ class OccupancyMap:
         """
         (x,y) = (round(pos[0]), round(pos[1])) # round to the closest (x,y) pos
 
-        (row,col) = (x,y)
+        (row,col) = (y,x)
 
         # check if the cell is out of bounds
         if not self.in_bounds(cell=(x,y)):
@@ -109,7 +110,7 @@ class OccupancyMap:
         :return: None
         """
         (x,y) = round(pos[0]), round(pos[1]) # round to nearest match
-        (row, col) = (x,y)
+        (row, col) = (y,x)
 
         self.occupancy_map[row][col] = OBSTACLE # set cell as an obstacle
 
@@ -119,7 +120,7 @@ class OccupancyMap:
         :return: None
         """
         (x,y) = round(pos[0]), round(pos[1]) # round to nearest match
-        (row, col) = (x,y)
+        (row, col) = (y,x)
 
         self.occupancy_map[row][col] = UNOCCUPIED # set cell as unoccupied
 
@@ -151,7 +152,7 @@ class SLAM:
         set the ground truth map for SLAM
         :param: g_map: new ground truth map
         """
-        self.truth_map_map = g_map
+        self.truth_map = g_map
 
     u = tuple[int, int]
     v = tuple[int, int]
@@ -204,5 +205,64 @@ class SLAM:
 
         return vertices
     
-        
+def build_map_from_predictions(
+            points:np.ndarray,
+            pred_labels: np.ndarray,
+            grid_resolution:float = 0.1,
+            obstacle_label: int = 1,
+    ):
+        """ 
+        Conver the RandLA-Net predictions to an Occupancy map
+        :param points: (N,3), xyz
+        :param pred_labels: (N,)
+        :param grid_resolution: meters per cell
+        :param obstacle_label: obstacle class
+
+        :return occupancy_map: OccupancyMap instance
+        :return grid_info: dictionary for coordinate conversion
+        """
+        # project to 2D plane (x,y)
+        xy = points[:,:2]
+
+        min_x, max_x = np.min(xy[:,0]), np.max(xy[:,0])
+        min_y, max_y = np.min(xy[:,1]), np.max(xy[:,1])
+
+        width = int(np.ceil((max_x - min_x) / grid_resolution)) + 1
+        height = int(np.ceil((max_y - min_y) / grid_resolution)) + 1
+
+        omap = OccupancyMap(width, height)
+
+        # get the obstacle points
+        obstacle_points = xy[pred_labels == obstacle_label]
+
+        # convert to the grid indices
+        cols = ((obstacle_points[:,0] - min_x) / grid_resolution).astype(int)
+        rows = ((obstacle_points[:,1] - min_y) / grid_resolution).astype(int)
+
+        # bounds
+        valid = (
+            (rows >= 0) & (rows < height) &
+            (cols >= 0) & (cols < width)
+        )
+
+        rows = rows[valid]
+        cols = cols[valid]
+
+        # fill the map
+        counts = {}
+
+        for r, c in zip(rows, cols):
+            counts[(r, c)] = counts.get((r, c), 0) + 1
+
+        for (r, c), count in counts.items():
+            if count >= 2:
+                omap.set_obstacles((c, r))
+
+        grid_info = {
+            "resolution": grid_resolution,
+            "min_x": min_x,
+            "min_y": min_y
+        }
+
+        return omap, grid_info
     

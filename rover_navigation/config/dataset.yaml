@@ -11,15 +11,14 @@
 # - param for sampling and preprocessing
 # - class definitions
 
-# each point contains: xyz coordinates, multiple scalar fields, label 
-# field representing annotated class
+# each point contains: xyz coordinates, multiple scalar feature fields, and a binary label field
 dataset:
   name: "cloudcompare_rover_dataset"
 
 paths:
-  raw_dir: "data/raw"
-  processed_dir: "data/processed"
-  test_file: "data/test_cloud.ply"
+  raw_dir: "rover_navigation/data/raw"
+  processed_dir: "rover_navigation/data/processed"
+  test_file: "rover_navigation/data/raw/test_cloud.ply"
 
 point_cloud:
   format: "cloudcompare_binary_ply"
@@ -29,11 +28,8 @@ point_cloud:
   feature_scalar_indices: [0, 1, 2, 3, 4]
 
 classes:
-  0: "class_0"
-  1: "class_1"
-  2: "class_2"
-  3: "class_3"
-  4: "class_4"
+  0: "non_obstacle"
+  1: "obstacle"
 
 preprocessing:
   center_cloud: true
