@@ -9,7 +9,7 @@ __pycache__/
 .pytest_cache/
 
 # training outputs
-checkpoints/
+# checkpoints/
 
 # processed data
 data/processed/
