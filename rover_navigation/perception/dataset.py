@@ -67,9 +67,15 @@ def _random_sample_indices(num_points_total: int, num_points_target: int) -> np.
 # input: query points (N,3), support points (M,3), number of neighbors (k)
 # output: (N,k) array of neighbor indices for each query point
 def _knn_indices(query_pts: np.ndarray, support_pts: np.ndarray, k: int) -> np.ndarray:
-    nbrs = NearestNeighbors(n_neighbors=k, algorithm="auto")
+    k_eff = min(k, support_pts.shape[0])
+    nbrs = NearestNeighbors(n_neighbors=k_eff,algorithm="auto")
     nbrs.fit(support_pts)
     _, indices = nbrs.kneighbors(query_pts)
+
+    if k_eff < k:
+        pad = np.repeat(indices[:,-1:], k-k_eff, axis=11)
+        indices = np.concatenate([indices, pad], axis=1)
+    
     return indices.astype(np.int64) 
 
 # initalize classdataset, loads .npz files and prepares batches for RandLa-Net training
@@ -153,6 +159,11 @@ class RandLANetDataset(Dataset):
     def __getitem__(self, idx: int) -> dict[str, Any]:
         sample = np.load(self.files[idx])
 
+        required_keys = {"points", "features", "labels"}
+        missing = required_keys - set(sample.files)
+        if missing:
+            raise KeyError(f"{self.files[idx]} is missing keys: {sorted(missing)}")
+
         # extract arrays
         points = sample["points"].astype(np.float32)      # (N, 3)
         features = sample["features"].astype(np.float32)  # (N, F)
@@ -175,6 +186,13 @@ class RandLANetDataset(Dataset):
             features = _normalize_features(features)
 
         input_features = np.concatenate([points, features], axis=1).astype(np.float32)
+        
+        expected_dim = int(load_yaml("config/training.yaml")["model"]["input_dim"])
+        if input_features.shape[1] != expected_dim:
+            raise ValueError(
+                f"Expected input_dim={expected_dim}, got {input_features.shape[1]} "
+                f"from points({points.shape[1]}) + features({features.shape[1]})"
+            )
 
         xyz_layers, neigh_idx_layers, sub_idx_layers, interp_idx_layers = self._build_hierarchy(points)
 

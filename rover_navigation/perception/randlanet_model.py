@@ -86,16 +86,28 @@ class RandLANet(nn.Module):
         self.bottleneck = SharedMLP1d(self.d_out[-1], self.d_out[-1])
 
         # define decoder channels
-        decoder_in_channels = [256, 128, 64, 32]
-        decoder_skip_channels = [128, 64, 16, 8]
-        decoder_out_channels = [128, 64, 32, 32]
-
-        self.decoder = nn.ModuleList(
+        encoder_channels = [8] + self.d_out
+        self.encoder = nn.ModuleList(
             [
-                SharedMLP1d(decoder_in_channels[i] + decoder_skip_channels[i], decoder_out_channels[i])
+                DilatedResidualBlock(encoder_channels[i],encoder_channels[i+1])
                 for i in range(self.num_layers)
             ]
         )
+        self.bottleneck = SharedMLP1d(self.d_out[-1], self.d_out[-1])
+
+        decoder_out_channels = list(reversed(self.d_out[:-1])) + [32]
+
+        decoder_layers = []
+        
+        current_in = self.d_out[-1]
+        
+        for i in range(self.num_layers):
+            skip_ch = skip_channels[-1 - i]
+            out_ch = decoder_out_channels[i]
+            decoder_layers.append(SharedMLP1d(current_in + skip_ch, out_ch))
+            current_in = out_ch
+
+        self.decoder = nn.ModuleList(decoder_layers)
 
         # final classifier layers
         self.classifier = nn.Sequential(

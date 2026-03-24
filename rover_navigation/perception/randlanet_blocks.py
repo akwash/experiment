@@ -32,14 +32,19 @@ def index_points(points: torch.Tensor, idx: torch.Tensor) -> torch.Tensor:
     idx:    (B, M, K) or (B, M, 1)
     returns: (B, M, K, C)
     """
-    # extract the dimensions
-    b, n, c = points.shape
-    _, m, k = idx.shape
+    if points.ndim != 3:
+        raise ValueError(f"points must have shape (B, N, C), got {points.shape}")
+    if idx.ndim != 3:
+        raise ValueError(f"idx must have shape (B, M, K), got {idx.shape}")
 
-    idx_expanded = idx.unsqueeze(-1).expand(-1, -1, -1, c) 
+    b, n, c = points.shape
+    if idx.min() < 0 or idx.max() >= n:
+        raise IndexError(f"Neighbor index out of bounds for N={n}")
+
+    _, m, k = idx.shape
+    idx_expanded = idx.unsqueeze(-1).expand(-1, -1, -1, c)
     points_expanded = points.unsqueeze(1).expand(-1, m, -1, -1)
-    gathered = torch.gather(points_expanded, 2, idx_expanded)
-    return gathered
+    return torch.gather(points_expanded, 2, idx_expanded)
 
 
 class SharedMLP2d(nn.Module):

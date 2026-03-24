@@ -53,9 +53,13 @@ def build_inference_batch(
     points, scalars = load_cloudcompare_ply(ply_path)
 
     # seperate labels and features
-    labels = scalars[:, label_col].astype(np.int64)
-    feature_cols = [i for i in range(scalars.shape[1]) if i != label_col]
-    features = scalars[:, feature_cols].astype(np.float32)
+    if scalars.size == 0 or label_col >= scalars.shape[1]:
+        labels = np.full(points.shape[0],-1,dtype=np.int64)
+        features = scalars.astype(np.float32) if scalars.size > 0 else np.zeros((points.shape[0],0), dtype=np.float32)
+    else:
+        labels = scalars[:,label_col].astype(np.int64)
+        feature_cols = [i for i in range(scalars.shape[1]) if i != label_col]
+        features = scalars[:,feature_cols].astype(np.float32)
 
     # sample points to a fixed number
     if points.shape[0] >= num_points:
@@ -123,7 +127,7 @@ def build_inference_batch(
         "sub_idx": sub_idx_layers,
         "interp_idx": interp_idx_layers,
     }
-    return batch
+    return batch, sampled_idx, points
 
 # helper function for moving the batch tensors to the correct device
 def move_batch_to_device(batch: dict, device: torch.device) -> dict:

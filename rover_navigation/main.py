@@ -13,8 +13,8 @@
 
 import numpy as np
 
-from perception.infer import run_inference
-from util.config_loader import load_yaml
+ffrom rover_navigation.perception.infer import run_inference
+from rover_navigation.util.config_loader import load_yaml
 
 
 def main() -> None:

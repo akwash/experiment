@@ -1,119 +1,211 @@
-# Filename: train.py
+# Filename: randlanet_model.py
 # Author: AK Wash
 # Created: 2026-03-10
 
-# Description: training pipeline for model. Performs following
-# tasks:
-# 1. Load dataset and training config files
-# 2. Construct RandLa-Net neural network
-# 3. Create PyTorch dataloader for training data
-# 4. train model using corss-entropy loss
-# 5. Save trained model checkpoints
-
-# output: trained model weights saved to the checkpoints directory
-# adapted from: https://github.com/aRI0U/RandLA-Net-pytorch
-import os
-from pathlib import Path
+# Description: implementation of RandLA-Net neural network for
+# the semantic segmentation of point clouds
+# combines:
+# - random point sampling
+# - feature learning
+# - local spatial encloding
+# - attentive feature aggregation
+#
+# network architecture:
+# - encoder: Multiple dilated residual blocks with hierarchical subsampling.
+# - bottleneck: Feature compression layer.
+# - decoder: Feature compression layer.
+# - classifier: Final layers producing per-point semantic class predictions.
+#
+# input: batch dictionary produced by dataset.py
+# output: tensor of shape (B,N,num_classes) representing the predicted
+# semantic labels for each point
 
 import torch
-from torch.utils.data import DataLoader
+import torch.nn as nn
 
-from rover_navigation.perception.dataset import RandLANetDataset
+from rover_navigation.perception.randlanet_blocks import (
+    DilatedResidualBlock,
+    SharedMLP1d,
+    index_points,
+)
 from rover_navigation.util.config_loader import load_yaml
-from rover_navigation.perception.model import MyRandLANet
 
 
-def collate_fn(batch: list[dict]) -> dict:
-    out = {}
+# random sampling and nearest neighbor interpolation for encoder/decoder
+def random_sample(features: torch.Tensor, pool_idx: torch.Tensor) -> torch.Tensor:
+    """
+    Random-sampling style pooling used in the encoder.
 
-    keys = batch[0].keys()
-    for key in keys:
-        if isinstance(batch[0][key], list):
-            out[key] = []
-            for i in range(len(batch[0][key])):
-                out[key].append(torch.stack([sample[key][i] for sample in batch], dim=0))
-        else:
-            out[key] = torch.stack([sample[key] for sample in batch], dim=0)
+    features: (B, C, N)
+    pool_idx: (B, M, K)
+    returns:  (B, C, M)
+    """
+    if features.ndim != 3:
+        raise ValueError(f"Expected features shape (B, C, N), got {features.shape}")
 
-    return out
+    if pool_idx.ndim != 3:
+        raise ValueError(f"Expected pool_idx shape (B, M, K), got {pool_idx.shape}")
 
+    # index_points expects (B, N, C), so permute first
+    neighbor_features = index_points(features.permute(0, 2, 1), pool_idx)  # (B, M, K, C)
+    neighbor_features = neighbor_features.max(dim=2)[0]  # (B, M, C)
 
-def move_batch_to_device(batch: dict, device: torch.device) -> dict:
-    moved = {}
-    for key, value in batch.items():
-        if isinstance(value, list):
-            moved[key] = [v.to(device) for v in value]
-        else:
-            moved[key] = value.to(device)
-    return moved
+    return neighbor_features.permute(0, 2, 1)  # (B, C, M)
 
 
-def train() -> None:
-    dataset_cfg = load_yaml("config/dataset.yaml")
-    training_cfg = load_yaml("config/training.yaml")
+def nearest_interpolation(features: torch.Tensor, interp_idx: torch.Tensor) -> torch.Tensor:
+    """
+    Nearest-neighbor interpolation used in the decoder.
 
-    processed_dir = dataset_cfg["paths"]["processed_dir"]
-    train_cfg = training_cfg["training"]
-    ckpt_cfg = training_cfg["checkpoints"]
-    loss_cfg = training_cfg["loss"]
-    model_cfg = training_cfg["model"]
+    features:   (B, C, M)
+    interp_idx: (B, N, 1)
+    returns:    (B, C, N)
+    """
+    if features.ndim != 3:
+        raise ValueError(f"Expected features shape (B, C, M), got {features.shape}")
 
-    if train_cfg["device"] == "auto":
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    else:
-        device = torch.device(train_cfg["device"])
+    if interp_idx.ndim != 3:
+        raise ValueError(f"Expected interp_idx shape (B, N, 1), got {interp_idx.shape}")
 
-    dataset = RandLANetDataset(processed_dir)
-    dataloader = DataLoader(
-        dataset,
-        batch_size=int(train_cfg["batch_size"]),
-        shuffle=True,
-        num_workers=int(train_cfg["num_workers"]),
-        collate_fn=collate_fn,
-    )
+    interpolated = index_points(features.permute(0, 2, 1), interp_idx)  # (B, N, 1, C)
+    interpolated = interpolated.squeeze(2)  # (B, N, C)
 
-    model = RandLANet().to(device)
-    criterion = torch.nn.CrossEntropyLoss(ignore_index=int(loss_cfg["ignore_index"]))
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=float(train_cfg["learning_rate"]),
-        weight_decay=float(train_cfg["weight_decay"]),
-    )
-
-    epochs = int(train_cfg["epochs"])
-    num_classes = int(model_cfg["num_classes"])
-
-    for epoch in range(epochs):
-        model.train()
-        epoch_loss = 0.0
-
-        for batch in dataloader:
-            batch = move_batch_to_device(batch, device)
-
-            logits = model(batch)                  # (B, N, num_classes)
-            labels = batch["labels"]               # (B, N)
-
-            logits = logits.reshape(-1, num_classes)
-            labels = labels.reshape(-1)
-
-            loss = criterion(logits, labels)
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            epoch_loss += float(loss.item())
-
-        avg_loss = epoch_loss / max(1, len(dataloader))
-        print(f"Epoch {epoch + 1}/{epochs} - Loss: {avg_loss:.4f}")
-
-    save_dir = Path(ckpt_cfg["save_dir"])
-    save_dir.mkdir(parents=True, exist_ok=True)
-    save_path = save_dir / ckpt_cfg["save_name"]
-
-    torch.save(model.state_dict(), save_path)
-    print(f"Saved model to {save_path}")
+    return interpolated.permute(0, 2, 1)  # (B, C, N)
 
 
-if __name__ == "__main__":
-    train()
+# main RandLA-Net model class
+# input: dataset and training config paths for model parameters
+class RandLANet(nn.Module):
+    def __init__(
+        self,
+        dataset_config_path: str = "config/dataset.yaml",
+        training_config_path: str = "config/training.yaml",
+    ):
+        super().__init__()
+
+        # load conig param
+        dataset_cfg = load_yaml(dataset_config_path)
+        training_cfg = load_yaml(training_config_path)
+
+        sampling_cfg = dataset_cfg["sampling"]
+        model_cfg = training_cfg["model"]
+
+        # extract model param
+        self.num_layers = int(sampling_cfg["num_layers"])
+        self.d_out = list(sampling_cfg["d_out"])
+        self.input_dim = int(model_cfg["input_dim"])
+        self.num_classes = int(model_cfg["num_classes"])
+
+        # initial feature projection
+        # input is expected to be (xyz + additional per-point features)
+        self.fc_start = SharedMLP1d(self.input_dim, 8)
+
+        # define encoder channels
+        # first layer is eight channels, then channels defined by d_out list in config
+        encoder_channels = [8] + self.d_out
+        self.encoder = nn.ModuleList(
+            [
+                DilatedResidualBlock(encoder_channels[i], encoder_channels[i + 1])
+                for i in range(self.num_layers)
+            ]
+        )
+
+        # bottleneck layer with same output channels as last encoder layer
+        self.bottleneck = SharedMLP1d(self.d_out[-1], self.d_out[-1])
+
+        # build decoder from encoder outputs instead of using hard-coded channel sizes
+        # skip features come from encoder outputs in forward()
+        skip_channels = self.d_out[:]  # one skip per encoder layer
+        decoder_out_channels = list(reversed(self.d_out[:-1])) + [32]
+
+        decoder_layers = []
+        current_in_channels = self.d_out[-1]
+
+        for i in range(self.num_layers):
+            skip_ch = skip_channels[-1 - i]
+            out_ch = decoder_out_channels[i]
+            decoder_layers.append(
+                SharedMLP1d(current_in_channels + skip_ch, out_ch)
+            )
+            current_in_channels = out_ch
+
+        self.decoder = nn.ModuleList(decoder_layers)
+
+        # final classifier layers
+        self.classifier = nn.Sequential(
+            SharedMLP1d(current_in_channels, 32),
+            nn.Dropout(p=0.5),
+            nn.Conv1d(32, self.num_classes, kernel_size=1),
+        )
+
+    # forward pass through network
+    def forward(self, batch: dict[str, torch.Tensor | list[torch.Tensor]]) -> torch.Tensor:
+        features = batch["features"]            # (B, N, C) input features (xyz + other features)
+        xyz_list = batch["xyz"]                 # xyz coords for each layer
+        neigh_idx_list = batch["neigh_idx"]     # neighbor indices for each layer
+        sub_idx_list = batch["sub_idx"]         # subsampling indices for each layer
+        interp_idx_list = batch["interp_idx"]   # interpol indices for each layer
+
+        # check the input dimensions
+        if features.ndim != 3:
+            raise ValueError(f"Expected features shape (B, N, C), got {features.shape}")
+
+        if features.shape[-1] != self.input_dim:
+            raise ValueError(
+                f"Expected {self.input_dim} input features per point, got {features.shape[-1]}"
+            )
+
+        if len(xyz_list) != self.num_layers:
+            raise ValueError(
+                f"Expected {self.num_layers} xyz layers, got {len(xyz_list)}"
+            )
+
+        if len(neigh_idx_list) != self.num_layers:
+            raise ValueError(
+                f"Expected {self.num_layers} neigh_idx layers, got {len(neigh_idx_list)}"
+            )
+
+        if len(sub_idx_list) != self.num_layers:
+            raise ValueError(
+                f"Expected {self.num_layers} sub_idx layers, got {len(sub_idx_list)}"
+            )
+
+        if len(interp_idx_list) != self.num_layers:
+            raise ValueError(
+                f"Expected {self.num_layers} interp_idx layers, got {len(interp_idx_list)}"
+            )
+
+        # intial feature transformation
+        x = features.permute(0, 2, 1)  # (B, C, N)
+        x = self.fc_start(x)
+
+        skip_features = []  # store features for skip connection in decoder
+
+        # encoder with random sampling and feature learning
+        for i in range(self.num_layers):
+            xyz = xyz_list[i]
+            neigh_idx = neigh_idx_list[i]
+            sub_idx = sub_idx_list[i]
+
+            x = self.encoder[i](x, xyz, neigh_idx)
+            skip_features.append(x)
+            x = random_sample(x, sub_idx)
+
+        # bottleneck
+        x = self.bottleneck(x)
+
+        # decoder with nearest neighbor interpolation and skip connections
+        for i in range(self.num_layers - 1, -1, -1):
+            interp_idx = interp_idx_list[i]
+            x = nearest_interpolation(x, interp_idx)
+
+            x = torch.cat([x, skip_features[i]], dim=1)
+
+            dec_idx = self.num_layers - 1 - i
+            x = self.decoder[dec_idx](x)
+
+        # final classifer for per-point semantic prediction
+        logits = self.classifier(x)      # (B, num_classes, N)
+        logits = logits.permute(0, 2, 1) # (B, N, num_classes)
+
+        return logits

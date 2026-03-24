@@ -16,8 +16,9 @@ Training loop reshapes logits and computes per-point loss
 
 """
 
-import torch.nn as nn
-from rover_navigation.RandLANet.model import RandLANet
+from rover_navigation.perception.randlanet_model import RandLANet
+
+__all__ = ["RandLANet"]
 
 class MyRandLANet(nn.Module):
     """
