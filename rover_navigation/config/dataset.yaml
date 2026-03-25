@@ -18,14 +18,26 @@ dataset:
 paths:
   raw_dir: "rover_navigation/data/raw"
   processed_dir: "rover_navigation/data/processed"
-  test_file: "rover_navigation/data/raw/test_cloud.ply"
+  # this is if using the ply:
+  #test_file: "rover_navigation/data/raw/test_cloud.ply"
+  test_file: "rover_navigation/data/raw/pos1_2box.csv"
 
 point_cloud:
-  format: "cloudcompare_binary_ply"
-  xyz_columns: [0, 1, 2]
-  total_scalar_fields: 6
-  label_scalar_index: 5
-  feature_scalar_indices: [0, 1, 2, 3, 4]
+  # this is if using the ply:
+  #format: "cloudcompare_binary_ply"
+  # xyz_columns: [0, 1, 2]
+  # total_scalar_fields: 6
+  # label_scalar_index: 5
+  # feature_scalar_indices: [0, 1, 2, 3, 4]
+
+
+  #this is if using the .csv:
+  format: "csv"
+  has_header: true
+  xyz_columns: [8, 9, 10]
+  total_scalar_fields: 0
+  feature_scalar_indices: []
+  label_scalar_index: null
 
 classes:
   0: "non_obstacle"
@@ -34,7 +46,7 @@ classes:
 preprocessing:
   center_cloud: true
   normalize_xyz: true
-  normalize_features: true
+  normalize_features: false # true for ply, false for csv
   num_points: 8192
 
 sampling:
