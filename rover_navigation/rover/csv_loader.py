@@ -35,6 +35,6 @@ def load_csv_point_cloud(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
     points = points[mask]
 
     # no extra features; use empty array for now
-    features = points.copy()
+    features = np.zeros((points.shape[0], 0), dtype=np.float32)
 
     return points, features
