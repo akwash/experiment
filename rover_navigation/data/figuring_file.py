@@ -1,7 +1,7 @@
 from plyfile import PlyData
 import numpy as np
 
-file_path = r"C:\Users\ak\OneDrive\Desktop\experiment\rover_navigation\data\test_cloud.ply"
+file_path = r"C:\Users\ak\OneDrive\Desktop\experiment\rover_navigation\data\raw\test_cloud.ply"
 
 ply = PlyData.read(file_path)
 data = ply["vertex"].data

@@ -30,6 +30,13 @@ def load_csv_point_cloud(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
         data["Z1_mm"]
     )).astype(np.float32)
 
+    # remove rows of NaN
+    NaN_mask = np.isfinite(points).all(axis=1)
+    NaN_mask &= ~np.all(np.isclose(points,0.0),axis=1)
+    points = points[NaN_mask]
+
+    # print("Any NaNs left:", np.isnan(points).any())
+
     # remove rows where xyz are all zero
     mask = ~np.all(points == 0, axis=1)
 
@@ -37,7 +44,7 @@ def load_csv_point_cloud(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
     points = points[mask]
 
     # workspace: 15 ft × 15 ft
-    workspace_size_m = 15 * 0.3048   # 4.572 m
+    workspace_size_m = 30 * 0.3048   # 4.572 m
     half_size = workspace_size_m / 2 # 2.286 m
 
     # height filter (remove ceiling / far wall noise)
