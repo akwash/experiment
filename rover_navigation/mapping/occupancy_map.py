@@ -7,7 +7,7 @@ OBSTACLE = 255
 UNOCCUPIED = 0
 
 class OccupancyMap:
-    def __init__(self, x_dim, y_dim, movement_setting = '4N'):
+    def __init__(self, x_dim, y_dim, movement_setting = '8N'):
         """
         sets intial values for the occupancy grid
         :param x_dim: dimension of the map in the x-direction
@@ -18,7 +18,7 @@ class OccupancyMap:
         self.y_dim = y_dim
 
         # map boundaries (units in m)
-        self.map_boundaries = (x_dim, y_dim)
+        self.map_boundaries = (y_dim, x_dim)
 
         # set occupancy map as unoccupied everywhere
         self.occupancy_map = np.zeros(self.map_boundaries,dtype=np.uint8)
@@ -280,10 +280,6 @@ def build_map_from_predictions(
             if count >= 2:
                 omap.set_obstacles((x, y))
 
-        for (r, c), count in counts.items():
-            if count >= 2:
-                omap.set_obstacles((c, r))
-
         grid_info = {
             "resolution": grid_resolution,
             "min_x": min_x,
@@ -295,7 +291,7 @@ def build_map_from_predictions(
 def world_to_grid(x: float, y: float, grid_info: dict) -> tuple[int, int]:
     col = int((x - grid_info["min_x"]) / grid_info["resolution"])
     row = int((y - grid_info["min_y"]) / grid_info["resolution"])
-    return col, row
+    return row, col
 
 
 def grid_to_world(x_idx: int, y_idx: int, grid_info: dict) -> tuple[float, float]:

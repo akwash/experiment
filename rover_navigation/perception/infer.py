@@ -162,6 +162,9 @@ def build_inference_batch(
 
         current_xyz = sampled_xyz
 
+
+    print("Running inference on:", ply_path)
+
     # build batch dictionary
     batch = {
         "features": torch.tensor(input_features[None, ...], dtype=torch.float32),
@@ -289,6 +292,10 @@ if __name__ == "__main__":
     ply_path = dataset_cfg["paths"]["test_file"]
 
     points, labels, pred = run_inference(ply_path)
+    print("Unique true classes:", np.unique(labels))
+    print("True label counts:", np.unique(labels, return_counts=True))
+    print("Unique predicted classes:", np.unique(pred))
+    print("Pred label counts:", np.unique(pred, return_counts=True))
 
     print("Points shape:", points.shape)
     print("True labels shape:", labels.shape)

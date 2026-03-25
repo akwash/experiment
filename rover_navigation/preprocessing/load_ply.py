@@ -69,6 +69,9 @@ def load_cloudcompare_ply(
         vertex["z"],
     ]).T.astype(np.float32)
 
+    # the file is set in mm for xyz
+    points /= 1000.0
+
     # labels
     if "scalar_label" not in field_names:
         raise ValueError(

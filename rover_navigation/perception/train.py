@@ -110,9 +110,8 @@ def train() -> None:
         training_config_path=TRAINING_CONFIG,
     ).to(device)
 
-    criterion = torch.nn.CrossEntropyLoss(
-        ignore_index=int(loss_cfg["ignore_index"])
-    )
+    class_weights = torch.tensor([1.0, 50.0], dtype=torch.float32, device=device)
+    criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 
     optimizer = torch.optim.Adam(
         model.parameters(),
