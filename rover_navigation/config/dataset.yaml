@@ -20,7 +20,7 @@ paths:
   processed_dir: "rover_navigation/data/processed"
   # this is if using the ply:
   #test_file: "rover_navigation/data/raw/test_cloud.ply"
-  test_file: "rover_navigation/data/raw/pos1_2box.csv"
+  test_file: "rover_navigation/data/raw/BigObstacles_pos3_High.csv"
 
 point_cloud:
   # this is if using the ply:

@@ -230,7 +230,7 @@ class SLAM:
 def build_map_from_predictions(
             points:np.ndarray,
             pred_labels: np.ndarray,
-            grid_resolution:float = 0.1,
+            grid_resolution:float = 0.1524, # m per cell
             obstacle_label: int = 1,
     ):
         """ 
@@ -243,14 +243,33 @@ def build_map_from_predictions(
         :return occupancy_map: OccupancyMap instance
         :return grid_info: dictionary for coordinate conversion
         """
+        # fix the environment boundaries, will need to add offset maybe
+        workspace_size_m = 15 * 0.3048 # 15ft
+        half_size = workspace_size_m / 2
+        min_x = -half_size
+        min_y = -half_size
+        max_x = half_size
+        max_y = half_size
+
+        # filter out ceilings
+        min_z = -0.2
+        max_z = 1.0
+
+        # crop to the working area
+        mask = (
+            (points[:,0] >= min_x) & (points[:,0]<=max_x) &
+            (points[:,1] >= min_y) & (points[:,1]<=max_y) &
+            (points[:,2] >= min_z) & (points[:,2]<=max_z))
+        
+        points = points[mask]
+        pred_labels = pred_labels[mask]
+
         # project to 2D plane (x,y)
         xy = points[:,:2]
 
-        min_x, max_x = np.min(xy[:,0]), np.max(xy[:,0])
-        min_y, max_y = np.min(xy[:,1]), np.max(xy[:,1])
 
-        width = int(np.ceil((max_x - min_x) / grid_resolution)) + 1
-        height = int(np.ceil((max_y - min_y) / grid_resolution)) + 1
+        width = int((max_x - min_x) / grid_resolution)
+        height = int((max_y - min_y) / grid_resolution)
 
         omap = OccupancyMap(width, height)
 
@@ -274,11 +293,11 @@ def build_map_from_predictions(
         counts = {}
 
         for r, c in zip(rows, cols):
-            counts[(c, r)] = counts.get((c, r), 0) + 1
+            counts[(r, c)] = counts.get((r, c), 0) + 1
 
-        for (x, y), count in counts.items():
+        for (row, col), count in counts.items():
             if count >= 2:
-                omap.set_obstacles((x, y))
+                omap.set_obstacles((col, row))
 
         grid_info = {
             "resolution": grid_resolution,
@@ -294,7 +313,7 @@ def world_to_grid(x: float, y: float, grid_info: dict) -> tuple[int, int]:
     return row, col
 
 
-def grid_to_world(x_idx: int, y_idx: int, grid_info: dict) -> tuple[float, float]:
-    x = grid_info["min_x"] + x_idx * grid_info["resolution"]
-    y = grid_info["min_y"] + y_idx * grid_info["resolution"]
+def grid_to_world(row: int, col: int, grid_info: dict) -> tuple[float, float]:
+    x = grid_info["min_x"] + col * grid_info["resolution"]
+    y = grid_info["min_y"] + row * grid_info["resolution"]
     return x, y

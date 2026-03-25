@@ -20,8 +20,8 @@ class DStarLite:
         self.k_m = 0
         self.U = PriorityQueue()
 
-        # rhs/g arrays indexed as [x, y] in your current planner convention
-        self.rhs = np.ones((map.x_dim, map.y_dim)) * np.inf
+        # rhs/g arrays indexed as [y,x] (rows, col)
+        self.rhs = np.full(map.get_map().shape, np.inf)
         self.g = self.rhs.copy()
 
         # map

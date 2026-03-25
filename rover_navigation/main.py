@@ -38,8 +38,10 @@ def main() -> None:
 
     # rover start and goal in the world coordiantes (meters)
     # NEED TO UPDATE FOR ACTUAL MAP
-    rover_pose_xy = (0.0, 0.0)
-    goal_pose_xy = (3.0, -5.0)
+    # allowable range x: -2.286 to 2.1140000000000003
+    # allowable range y: -2.286 to 2.1140000000000003 
+    rover_pose_xy = (-1.0, 0.0)
+    goal_pose_xy = (1, 2)
 
     
     # Run semantic segmentation using RandLA-Net
@@ -135,9 +137,8 @@ def main() -> None:
     plt.tight_layout()
     plt.show()
 
-    # ==========================================
-    # 6. Print path
-    # ==========================================
+    
+    # Print path
     print("\nNavigation Complete.")
     print(f"Path length: {len(path)}")
     print("Path:")
