@@ -38,10 +38,10 @@ def main() -> None:
 
     # rover start and goal in the world coordiantes (meters)
     # NEED TO UPDATE FOR ACTUAL MAP
-    # allowable range x: -2.286 to 2.1140000000000003
-    # allowable range y: -2.286 to 2.1140000000000003 
-    rover_pose_xy = (-1.0, 0.0)
-    goal_pose_xy = (1, 2)
+    # allowable range x: 0 to 4.4 m, 0 to <15 ft
+    # allowable range y: 0 to 4.4 m, 0 to < 15 ft
+    rover_pose_xy = (14.0 * 0.3048, 14.0 * 0.3048)
+    goal_pose_xy = (1 * 0.3048, 2 * 0.3048)
 
     
     # Run semantic segmentation using RandLA-Net
@@ -62,6 +62,17 @@ def main() -> None:
         grid_resolution=0.10,
         obstacle_label=1,
     )
+    # Check to see if there are obstacle labels being passed through
+    # unique = np.unique(pred_labels)
+    # print("Unique predicted labels:", unique)
+
+    # contains_0 = 0 in unique
+    # contains_1 = 1 in unique
+
+    # print("Contains 0:", contains_0)
+    # print("Contains 1:", contains_1)
+    # num_ones = np.sum(pred_labels == 1)
+    # print("Number of ones:", num_ones)
 
     # inflate obstacles for rover safety margin
     truth_map.inflate(radius=2)
@@ -71,13 +82,7 @@ def main() -> None:
     print(f"Grid shape: {grid.shape}")
     print(f"Obstacle cells: {np.sum(grid == 255)}")
 
-    # Convert start and goal into grid cells
-    
-    start = world_to_grid(rover_pose_xy[0], rover_pose_xy[1], grid_info)
-    goal = world_to_grid(goal_pose_xy[0], goal_pose_xy[1], grid_info)
 
-    print(f"Start (grid): {start}")
-    print(f"Goal (grid): {goal}")
 
     # debugging checks
     # Convert start and goal into grid cells
@@ -133,6 +138,7 @@ def main() -> None:
     plt.title("Occupancy Grid + Planned Path")
     plt.xlabel("X (grid)")
     plt.ylabel("Y (grid)")
+    plt.gca().invert_yaxis()
     plt.legend()
     plt.tight_layout()
     plt.show()

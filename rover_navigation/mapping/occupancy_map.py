@@ -1,6 +1,8 @@
 import numpy as np
 from rover_navigation.util.utils import get_movements_4n, get_movements_8n, heuristic, Vertices, Vertex
 from typing import Dict, List
+import matplotlib.pyplot as plt
+
 
 # set values for occupied and unoccupied cells in the map
 OBSTACLE = 255 
@@ -248,22 +250,18 @@ def build_map_from_predictions(
             # y_min = 0, x_min = 0
             # y_max = 15 ft, x_max = 15 ft
 
-        workspace_size_m = 15 * 0.3048 # 15ft
+        workspace_size_m = 15 * 0.3048 # 15ft (value in m)
        
-        # min_x = 0
-        # min_y = 0
-        # max_x = workspace_size_m
-        # max_y = workspace_size_m
-
-        #mm
         min_x = 0
         min_y = 0
-        max_x = 0
-        max_y = 0
+        max_x = workspace_size_m
+        max_y = workspace_size_m
+
+        
         #mm
         # filter out ceilings
         min_z = 0
-        max_z = 0
+        max_z = 30
 
         # crop to the working area
         mask = (
@@ -327,3 +325,26 @@ def grid_to_world(row: int, col: int, grid_info: dict) -> tuple[float, float]:
     x = grid_info["min_x"] + col * grid_info["resolution"]
     y = grid_info["min_y"] + row * grid_info["resolution"]
     return x, y
+
+def visualize_empty_grid(omap):
+    grid = omap.get_map()
+    h, w = grid.shape
+
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(6,6))
+    plt.pcolormesh(grid, edgecolors='black', linewidth=0.3, cmap='gray_r')
+
+    ax = plt.gca()
+    ax.set_aspect('equal')
+    
+
+    plt.title("Grid")
+    plt.show()
+
+if __name__ == "__main__":
+    # create a test map
+    omap = OccupancyMap(30, 30)
+
+    # visualize it
+    visualize_empty_grid(omap)

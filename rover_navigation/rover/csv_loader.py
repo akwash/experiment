@@ -32,18 +32,21 @@ def load_csv_point_cloud(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
     )).astype(np.float32)
 
 
-    # remove rows of NaN
-    NaN_mask = np.isfinite(points).all(axis=1)
-    NaN_mask &= ~np.all(np.isclose(points,0.0),axis=1)
-    points = points[NaN_mask]
+    # convert ot meters from mm
+    points = points / 1000 
+    
+    # # remove rows of NaN
+    # NaN_mask = np.isfinite(points).all(axis=1)
+    # NaN_mask &= ~np.all(np.isclose(points,0.0),axis=1)
+    # points = points[NaN_mask]
 
-    # print("Any NaNs left:", np.isnan(points).any())
+    # # print("Any NaNs left:", np.isnan(points).any())
 
-    # remove rows where xyz are all zero
-    mask = ~np.all(points == 0, axis=1)
+    # # remove rows where xyz are all zero
+    # mask = ~np.all(points == 0, axis=1)
 
-    points = points
-    points = points[mask]
+    # points = points
+    # points = points[mask]
 
 
     # no extra features; use empty array for now

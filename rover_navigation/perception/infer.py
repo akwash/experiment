@@ -234,6 +234,19 @@ def run_inference(
 
     # convert the predictions to numpy
     pred = pred.squeeze(0).cpu().numpy()
+
+    # Check to see if there are obstacle labels being passed through
+    # unique = np.unique(pred)
+    # print("Unique predicted labels:", unique)
+
+    # contains_0 = 0 in unique
+    # contains_1 = 1 in unique
+
+    # print("Contains 0:", contains_0)
+    # print("Contains 1:", contains_1)
+    # num_ones = np.sum(pred == 1)
+    # print("Number of ones:", num_ones)
+
     return vis_points, true_labels, pred
 
 
