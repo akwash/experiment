@@ -1,3 +1,0 @@
-
-
-# assign movement cost

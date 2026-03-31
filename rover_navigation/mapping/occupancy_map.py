@@ -243,17 +243,27 @@ def build_map_from_predictions(
         :return occupancy_map: OccupancyMap instance
         :return grid_info: dictionary for coordinate conversion
         """
-        # fix the environment boundaries, will need to add offset maybe
-        workspace_size_m = 15 * 0.3048 # 15ft
-        half_size = workspace_size_m / 2
-        min_x = -half_size
-        min_y = -half_size
-        max_x = half_size
-        max_y = half_size
+        # global enviornment boundaries:
+            # 0,0 at bottom left cell
+            # y_min = 0, x_min = 0
+            # y_max = 15 ft, x_max = 15 ft
 
+        workspace_size_m = 15 * 0.3048 # 15ft
+       
+        # min_x = 0
+        # min_y = 0
+        # max_x = workspace_size_m
+        # max_y = workspace_size_m
+
+        #mm
+        min_x = 0
+        min_y = 0
+        max_x = 0
+        max_y = 0
+        #mm
         # filter out ceilings
-        min_z = -0.2
-        max_z = 1.0
+        min_z = 0
+        max_z = 0
 
         # crop to the working area
         mask = (

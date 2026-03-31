@@ -60,7 +60,8 @@ def load_point_cloud_for_inference(
     suffix = input_path.suffix.lower()
 
     if suffix == ".ply":
-        points, features, labels = load_cloudcompare_ply(input_path)
+        points, features, _ = load_cloudcompare_ply(input_path)
+        labels = np.full(points.shape[0],-1, dtype=np.int64)
         return points, features, labels
     
     if suffix == '.csv':
@@ -98,6 +99,10 @@ def build_inference_batch(
 
     # load point cloud data
     points, features, labels = load_point_cloud_for_inference(ply_path)
+    assert points.ndim == 2 and points.shape[1] == 3, "Points must be (N, 3)"
+    assert features.ndim == 2, "Features must be (N, F)"
+    assert labels.ndim == 1 and labels.shape[0] == points.shape[0], \
+        "Labels must be (N,)"
 
     # keep a copy of sampled points before normalization for nicer visualization
     if points.shape[0] >= num_points:

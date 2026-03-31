@@ -55,7 +55,7 @@ def _normalize_features(features: np.ndarray) -> np.ndarray:
     return ((features - mean) / std).astype(np.float32)
 
 # function for sample without replacement if enough points exist, otherwise sample all points
-# and then duplicate to reach target account. (Fixed size batches for training)
+# and then duplicate to reach target. (Fixed size batches for training)
 # input: total number of points, target number of points
 # output: array of indices for sampling
 def _random_sample_indices(num_points_total: int, num_points_target: int) -> np.ndarray:

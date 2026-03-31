@@ -6,6 +6,7 @@
 
 from pathlib import Path
 import numpy as np
+from rover_navigation.perception.dataset import _normalize_points
 
 
 def load_csv_point_cloud(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
@@ -30,6 +31,7 @@ def load_csv_point_cloud(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
         data["Z1_mm"]
     )).astype(np.float32)
 
+
     # remove rows of NaN
     NaN_mask = np.isfinite(points).all(axis=1)
     NaN_mask &= ~np.all(np.isclose(points,0.0),axis=1)
@@ -40,25 +42,9 @@ def load_csv_point_cloud(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
     # remove rows where xyz are all zero
     mask = ~np.all(points == 0, axis=1)
 
-    points = points / 1000.0
+    points = points
     points = points[mask]
 
-    # workspace: 15 ft × 15 ft
-    workspace_size_m = 30 * 0.3048   # 4.572 m
-    half_size = workspace_size_m / 2 # 2.286 m
-
-    # height filter (remove ceiling / far wall noise)
-    min_z = -2.0
-    max_z = 6
-
-    mask_crop = (
-        (points[:, 0] >= -half_size) & (points[:, 0] <= half_size) &
-        (points[:, 1] >= -half_size) & (points[:, 1] <= half_size) &
-        (points[:, 2] >= min_z) & (points[:, 2] <= max_z)
-    )
-
-    points = points[mask_crop]
-    print(f"Points after crop: {points.shape[0]}")
 
     # no extra features; use empty array for now
     features = np.zeros((points.shape[0], 0), dtype=np.float32)
