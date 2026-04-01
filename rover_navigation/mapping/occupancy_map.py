@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 # set values for occupied and unoccupied cells in the map
-OBSTACLE = 255 
+OBSTACLE = 1
 UNOCCUPIED = 0
 
 class OccupancyMap:
@@ -260,7 +260,7 @@ def build_map_from_predictions(
         
         #mm
         # filter out ceilings
-        min_z = 0
+        min_z = -5
         max_z = 30
 
         # crop to the working area
@@ -342,9 +342,31 @@ def visualize_empty_grid(omap):
     plt.title("Grid")
     plt.show()
 
+def transform_to_world(points, rover_pose_xy, heading_rad):
+    """
+    Transform local sensor frame points into world frame.
+    points: (N,3) xyz in local sensor frame
+    :param rover_pose_xy: (x, y) world position of rover in meters
+    :paramheading_rad: rover yaw angle in radians
+    :return: (N,3) points in world frame
+    """
+    cos_h = np.cos(heading_rad) # rot matrix
+    sin_h = np.sin(heading_rad) # rot matrix
+
+    R = np.array([[cos_h, -sin_h],
+                  [sin_h,  cos_h]]) # yaw rotation matrix
+
+    xy_local = points[:, :2] # local xy coords
+    xy_world = (R @ xy_local.T).T + np.array(rover_pose_xy) # world xy coords after rot and transl
+
+    points_world = points.copy() # change xy to world
+    points_world[:, :2] = xy_world # update xy to world
+    return points_world
+
 if __name__ == "__main__":
     # create a test map
     omap = OccupancyMap(30, 30)
 
     # visualize it
     visualize_empty_grid(omap)
+

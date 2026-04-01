@@ -18,10 +18,14 @@ import matplotlib.pyplot as plt
 from rover_navigation.util.config_loader import load_yaml
 from rover_navigation.perception.infer import run_inference
 from rover_navigation.mapping.occupancy_map import (
+    SLAM,
     build_map_from_predictions,
+    grid_to_world,
+    transform_to_world,
     world_to_grid,
 )
 from rover_navigation.planning.dstar_lite import DStarLite
+from rover_navigation.rover.position_finder import heading_from_path
 
 
 # create the file paths so that it doesnt matter where its run from
@@ -40,8 +44,8 @@ def main() -> None:
     # NEED TO UPDATE FOR ACTUAL MAP
     # allowable range x: 0 to 4.4 m, 0 to <15 ft
     # allowable range y: 0 to 4.4 m, 0 to < 15 ft
-    rover_pose_xy = (14.0 * 0.3048, 14.0 * 0.3048)
-    goal_pose_xy = (1 * 0.3048, 2 * 0.3048)
+    rover_pose_xy = (3 * 0.3048, 3 * 0.3048)
+    goal_pose_xy = (9 * 0.3048, 4 * 0.3048)
 
     
     # Run semantic segmentation using RandLA-Net
@@ -59,29 +63,40 @@ def main() -> None:
     truth_map, grid_info = build_map_from_predictions(
         points,
         pred_labels,
-        grid_resolution=0.10,
+        grid_resolution=0.1524,
         obstacle_label=1,
     )
     # Check to see if there are obstacle labels being passed through
-    # unique = np.unique(pred_labels)
-    # print("Unique predicted labels:", unique)
+    unique = np.unique(pred_labels)
+    print("Unique predicted labels:", unique)
 
-    # contains_0 = 0 in unique
-    # contains_1 = 1 in unique
+    contains_0 = 0 in unique
+    contains_1 = 1 in unique
 
-    # print("Contains 0:", contains_0)
-    # print("Contains 1:", contains_1)
-    # num_ones = np.sum(pred_labels == 1)
-    # print("Number of ones:", num_ones)
+    print("Contains 0:", contains_0)
+    print("Contains 1:", contains_1)
+    num_ones = np.sum(pred_labels == 1)
+    print("Number of ones:", num_ones)
 
     # inflate obstacles for rover safety margin
     truth_map.inflate(radius=2)
 
     grid = truth_map.get_map()
 
-    print(f"Grid shape: {grid.shape}")
-    print(f"Obstacle cells: {np.sum(grid == 255)}")
 
+    # check to see if the obstacle cells are within the bounds of the map
+    rows, cols = grid.shape
+    obs_r, obs_c = np.where(grid == 1)
+    invalid = np.where(
+    (obs_r < 0) | (obs_r >= rows) |
+    (obs_c < 0) | (obs_c >= cols)
+    )[0]
+
+    if len(invalid) > 0:
+        print("ERROR: Some obstacle cells are out of bounds!")
+        print("Example:", list(zip(obs_r[invalid][:10], obs_c[invalid][:10])))
+    else:
+        print("All obstacle cells fall within map bounds.")
 
 
     # debugging checks
@@ -114,13 +129,38 @@ def main() -> None:
     
     # Run D* Lite planner
     print("\nRunning D* Lite planning...")
-    planner = DStarLite(map=truth_map, s_start=start, s_goal=goal)
-    path, g, rhs = planner.move_and_replan(robot_position=start)
+    planner = DStarLite(map=truth_map, s_start=start, s_goal=goal) # planner takes in inflated obstacles
+    path, g, rhs = planner.move_and_replan(robot_position=start) 
 
     print("Planning complete.")
     print(f"Path length: {len(path)}")
 
+    slam = SLAM(map=truth_map, view_range=2) 
     
+    for step_idx, grid_pos in enumerate(path):
+        heading = heading_from_path(path, step_idx) # get heading in world frame for the current step
+        
+
+    world_x, world_y = grid_to_world(grid_pos[0], grid_pos[1], grid_info) # convert grid to world coords
+    points_world = transform_to_world(points, (world_x, world_y), heading) # transform point cloud to world frame based on current position
+
+    # update the map with the new transformed scan
+    new_map, _ = build_map_from_predictions(
+        points_world,
+        pred_labels,
+        grid_resolution=0.1524,
+        obstacle_label=1,
+    )
+    slam.slam_map.set_map(new_map.get_map()) # update the slam map with map from current scan
+
+    changed_vertices, updated_map = slam.rescan(global_pos=grid_pos) # get the changed vertices
+
+    if len(changed_vertices.vertices) > 0:
+        print(f"New obstacles at step {step_idx}, replanning...")
+        path, g, rhs = planner.move_and_replan(robot_position=grid_pos)
+
+    grid = truth_map.get_map() # get final grid for visualization
+
     # Visualize occupancy map and path
     print("\nVisualizing results...")
     path_np = np.array(path)
