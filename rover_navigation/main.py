@@ -19,6 +19,7 @@ from rover_navigation.util.config_loader import load_yaml
 from rover_navigation.perception.infer import run_inference
 from rover_navigation.mapping.occupancy_map import (
     build_map_from_predictions,
+    grid_to_world,
     sensor_to_rover_local,
     transform_local_to_world,
     world_to_grid,
@@ -120,6 +121,35 @@ def build_debug_sender(dataset_cfg: dict) -> DebugSender | None:
     return UdpJsonSender(host=host, port=port)
 
 
+def update_rover_pose_from_motion(
+    rover_pose_xy: tuple[float, float],
+    rover_heading: float,
+    moved_segment: list[tuple[int, int]],
+    grid_info: dict,
+) -> tuple[tuple[float, float], float]:
+    """
+    Update rover world pose and heading from simulated grid motion.
+
+    - Position is set from the final moved grid cell via grid_to_world.
+    - Heading is computed from the final move direction using world axes:
+      +x right (col direction), +y forward (row direction).
+    """
+    if not moved_segment:
+        return rover_pose_xy, rover_heading
+
+    end_row, end_col = moved_segment[-1]
+    rover_pose_xy = grid_to_world(end_row, end_col, grid_info)
+
+    if len(moved_segment) >= 2:
+        prev_row, prev_col = moved_segment[-2]
+        d_col = end_col - prev_col  # +x right
+        d_row = end_row - prev_row  # +y forward
+        if d_col != 0 or d_row != 0:
+            rover_heading = float(np.arctan2(d_row, d_col))
+
+    return rover_pose_xy, rover_heading
+
+
 def main() -> None:
     # load the dataset configuration
     dataset_cfg = load_yaml(DATASET_CONFIG)
@@ -214,8 +244,17 @@ def main() -> None:
         else:
             traveled_path.extend(moved_segment[1:])
 
+        # keep rover pose and yaw consistent with simulated motion
+        rover_pose_xy, rover_heading = update_rover_pose_from_motion(
+            rover_pose_xy=rover_pose_xy,
+            rover_heading=rover_heading,
+            moved_segment=moved_segment,
+            grid_info=grid_info,
+        )
+
         print(f"Planned path length: {len(path)}")
         print(f"Moved to: {current_grid_pos}")
+        print(f"Rover world pose: {rover_pose_xy}, heading(rad): {rover_heading:.3f}")
 
         if current_grid_pos == goal_grid_pos:
             print("Goal reached.")

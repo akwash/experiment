@@ -17,14 +17,14 @@ class LiveDebugViewer:
     """Matplotlib viewer for live planning debug frames."""
 
     def __init__(self, receiver: DebugReceiver):
-        self.receiver = receiver
-        self._latest: Optional[DebugFrame] = None
+        self.receiver = receiver # set receiver to get debug frames from
+        self._latest: Optional[DebugFrame] = None # store latest frame
 
-        self.fig, self.ax = plt.subplots(figsize=(8, 6))
-        self.im = None
-        self.path_line = None
-        self.rover_scatter = None
-        self.goal_scatter = None
+        self.fig, self.ax = plt.subplots(figsize=(8, 6)) # create figure adn axis
+        self.im = None # image handle for occupancy grid
+        self.path_line = None # line handle for path
+        self.rover_scatter = None # scatter handle for rover pos
+        self.goal_scatter = None # scatter handle for goal pos
         self.ax.set_title("Live Rover Planning Debug")
         self.ax.set_xlabel("X (grid col)")
         self.ax.set_ylabel("Y (grid row)")

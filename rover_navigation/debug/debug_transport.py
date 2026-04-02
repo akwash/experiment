@@ -68,16 +68,16 @@ class UdpJsonReceiver(DebugReceiver):
     """Simple UDP JSON receiver for live debug visualization."""
 
     def __init__(self, bind_host: str, bind_port: int, timeout_s: float = 0.001):
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self._sock.bind((bind_host, bind_port))
-        self._sock.settimeout(timeout_s)
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP socket
+        self._sock.bind((bind_host, bind_port)) # bind to specified host/port
+        self._sock.settimeout(timeout_s) # set timeout for non-blocking recv
 
     def recv_latest(self) -> Optional[DebugFrame]:
-        latest: Optional[DebugFrame] = None
+        latest: Optional[DebugFrame] = None # latest frame received
         while True:
             try:
-                data, _addr = self._sock.recvfrom(10 * 1024 * 1024)
-                latest = DebugFrame.from_json_bytes(data)
+                data, _addr = self._sock.recvfrom(10 * 1024 * 1024) # receive data
+                latest = DebugFrame.from_json_bytes(data) # parse JSON
             except socket.timeout:
                 break
         return latest

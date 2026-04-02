@@ -24,7 +24,7 @@ class DebugFrame:
     goal_cell: tuple[int, int]
 
     def to_dict(self) -> dict[str, Any]:
-        grid = np.asarray(self.occupancy_grid)
+        grid = np.asarray(self.occupancy_grid) # numpy array for validation 
         if grid.ndim != 2:
             raise ValueError(f"Expected 2D occupancy grid, got shape {grid.shape}")
 
