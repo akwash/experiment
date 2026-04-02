@@ -356,23 +356,27 @@ def transform_to_world(
       lidar -> body -> world
 
     Conventions used here:
-      - world/body x is forward, y is left, z is up
+      - Ouster LiDAR frame: +X forward, +Y left, +Z up
+      - world frame: +X right, +Y forward, +Z up
       - heading_rad is rover yaw in radians, positive CCW in world XY
       - points are row vectors with shape (N, 3)
 
     Defaults:
-      - lidar_to_body_rotation maps LiDAR x-right/y-forward to body x-forward/y-left
+      - lidar_to_body_rotation is non-identity and maps Ouster LiDAR axes to body axes:
+          x_body = -y_lidar
+          y_body =  x_lidar
+          z_body =  z_lidar
       - lidar_to_body_translation is zero (sensor origin at body origin)
     """
     if points.ndim != 2 or points.shape[1] != 3:
         raise ValueError(f"Expected points shape (N, 3), got {points.shape}")
 
     if lidar_to_body_rotation is None:
-        # [x_b, y_b, z_b] = [y_l, -x_l, z_l]
+        # [x_b, y_b, z_b] = [-y_l, x_l, z_l]
         lidar_to_body_rotation = np.array(
             [
-                [0.0, 1.0, 0.0],
-                [-1.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0],
+                [1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0],
             ],
             dtype=np.float32,
@@ -390,6 +394,7 @@ def transform_to_world(
             f"Expected lidar_to_body_translation shape (3,), got {lidar_to_body_translation.shape}"
         )
 
+    # Rotate body frame in world plane by heading.
     cos_h = np.cos(heading_rad)
     sin_h = np.sin(heading_rad)
     world_from_body = np.array(

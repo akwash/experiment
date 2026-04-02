@@ -40,7 +40,7 @@ class BaseLidarReader(ABC):
     """
 
     @abstractmethod
-    def capture_one_scan_mm(self) -> np.ndarray:
+    def capture_one_scan_mm(self) -> np.ndarray: 
         """Capture one scan and return points as (N, 3) in millimeters."""
 
 
@@ -54,11 +54,15 @@ class RPLidarReader(BaseLidarReader):
     - Requires the optional `rplidar` package on the Jetson.
     """
 
-    port: str
-    timeout_s: float = 8.0
-    min_points: int = 30
+    port: str 
+    timeout_s: float = 8.0 # max seconds to wait for scan
+    min_points: int = 30 # minimum points from a scan to be valid
 
-    def capture_one_scan_mm(self) -> np.ndarray:
+    def capture_one_scan_mm(self) -> np.ndarray: 
+        """
+        Capture one scan get points in (N,3) in mm
+        :return: points as (N,3)
+        """
         try:
             from rplidar import RPLidar  # type: ignore
         except Exception as exc:  # pragma: no cover - depends on Jetson environment
@@ -66,10 +70,10 @@ class RPLidarReader(BaseLidarReader):
                 "Failed to import rplidar. Install it on the Jetson first."
             ) from exc
 
-        lidar = None
-        start_t = time.monotonic()
+        lidar = None 
+        start_t = time.monotonic() # start time to track timeout
         try:
-            lidar = RPLidar(self.port)
+            lidar = RPLidar(self.port) # connect to LiDAR on port
 
             for scan in lidar.iter_scans():
                 if time.monotonic() - start_t > self.timeout_s:
@@ -84,13 +88,13 @@ class RPLidarReader(BaseLidarReader):
                 for _quality, angle_deg, distance_mm in scan:
                     if distance_mm <= 0:
                         continue
-                    theta = np.deg2rad(angle_deg)
-                    x_mm = float(distance_mm * np.cos(theta))
-                    y_mm = float(distance_mm * np.sin(theta))
-                    points.append((x_mm, y_mm, 0.0))
+                    theta = np.deg2rad(angle_deg) # convert angle to rad
+                    x_mm = float(distance_mm * np.cos(theta)) # convert polar to cartesian
+                    y_mm = float(distance_mm * np.sin(theta)) # convert polar to cartesian
+                    points.append((x_mm, y_mm, 0.0)) # set z = 0
 
                 if len(points) >= self.min_points:
-                    return np.asarray(points, dtype=np.float32)
+                    return np.asarray(points, dtype=np.float32) # return points as (N,3)
 
             raise LidarCaptureError("LiDAR returned no usable scans.")
         except LidarCaptureError:
@@ -98,7 +102,7 @@ class RPLidarReader(BaseLidarReader):
         except Exception as exc:  # pragma: no cover - depends on hardware
             raise LidarCaptureError(f"Unexpected LiDAR read failure: {exc}") from exc
         finally:
-            if lidar is not None:
+            if lidar is not None: # LiDAR cleanup (disconnect)
                 try:
                     lidar.stop()
                 except Exception:
@@ -132,16 +136,16 @@ def write_scan_csv(
     if points_mm.shape[0] == 0:
         raise LidarCaptureError("Refusing to write empty scan.")
 
-    out_csv.parent.mkdir(parents=True, exist_ok=True)
-    timestamp_ns = int(time.time_ns() if timestamp_ns is None else timestamp_ns)
+    out_csv.parent.mkdir(parents=True, exist_ok=True) # check for output directory
+    timestamp_ns = int(time.time_ns() if timestamp_ns is None else timestamp_ns) # set current time
 
-    fieldnames = ["X1_mm", "Y1_mm", "Z1_mm"]
+    fieldnames = ["X1_mm", "Y1_mm", "Z1_mm"] # requried columns for csv_loader.py
     if include_timestamp_ns:
-        fieldnames.append("timestamp_ns")
+        fieldnames.append("timestamp_ns") 
 
     try:
         with out_csv.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=fieldnames) # create CSV writer
             writer.writeheader()
 
             for x_mm, y_mm, z_mm in points_mm:
@@ -159,7 +163,7 @@ def write_scan_csv(
 
 def default_scan_filename() -> str:
     """Build a timestamped filename for one scan."""
-    utc = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    utc = datetime.utcnow().strftime("%Y%m%d_%H%M%S") # UTC timestamp
     return f"scan_{utc}_{time.time_ns()}.csv"
 
 
@@ -168,9 +172,14 @@ def capture_and_save_one_scan(
     out_dir: Path,
     include_timestamp_ns: bool = True,
 ) -> Path:
-    """Capture one scan with the provided reader and save one CSV file."""
-    points_mm = reader.capture_one_scan_mm()
-    out_csv = out_dir / default_scan_filename()
+    """Capture one scan with the provided reader and save one CSV file.
+    :param reader: LiDAR reader
+    :param out_dir: directory to save CSV
+    :param include_timestamp_ns: include timestamp column
+    :return: path to csv
+    """
+    points_mm = reader.capture_one_scan_mm() # points (N,3) in mm
+    out_csv = out_dir / default_scan_filename() # output path
     write_scan_csv(
         points_mm=points_mm,
         out_csv=out_csv,
@@ -180,7 +189,11 @@ def capture_and_save_one_scan(
 
 
 def build_reader(args: argparse.Namespace) -> BaseLidarReader:
-    """Create a hardware reader from CLI arguments."""
+    """
+    Create a hardware reader from CLI arguments.
+    :param args: CLI arguments
+    :return: LiDAR reader instance
+    """
     if args.backend == "rplidar":
         if not args.port:
             raise LidarCaptureError("--port is required when backend is 'rplidar'.")
@@ -194,7 +207,9 @@ def build_reader(args: argparse.Namespace) -> BaseLidarReader:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build CLI parser for LiDAR capture."""
+    """
+    Build CLI parser for LiDAR capture.
+    """
     parser = argparse.ArgumentParser(
         description="Capture one LiDAR scan and save it as CSV."
     )
@@ -236,12 +251,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: Iterable[str] | None = None) -> int:
     """CLI entry point."""
-    parser = build_arg_parser()
-    args = parser.parse_args(list(argv) if argv is not None else None)
+    parser = build_arg_parser() # bukld CLI parser
+    args = parser.parse_args(list(argv) if argv is not None else None) # parse CLI
 
     try:
-        reader = build_reader(args)
-        out_dir = Path(args.out)
+        reader = build_reader(args) # create LiDAR reader
+        out_dir = Path(args.out) # output directory
         out_csv = capture_and_save_one_scan(
             reader=reader,
             out_dir=out_dir,
