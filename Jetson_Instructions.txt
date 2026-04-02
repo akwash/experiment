@@ -1,0 +1,177 @@
+ROVER DEBUG VIEWER SETUP INSTRUCTIONS
+
+This guide explains how to run the rover planning system on the Jetson and view the live map/path on your laptop.
+
+---
+
+## STEP 1 — FIND YOUR LAPTOP IP ADDRESS
+
+On your LAPTOP:
+
+1. Open PowerShell
+
+2. Run:
+
+   ipconfig
+
+3. Find your Wi-Fi adapter section
+
+4. Look for:
+
+   IPv4 Address . . . . . . . . . . : XXX.XXX.X.XX
+
+5. Copy this IP address (you will use it later)
+
+---
+
+## STEP 2 — CONFIGURE DEBUG SENDER ON JETSON
+
+On the JETSON:
+
+1. Open this file:
+
+   rover_navigation/config/dataset.yaml
+
+2. Find this section:
+
+   debug:
+   enabled: true
+   host: "127.0.0.1"
+   port: 9876
+
+3. Replace 127.0.0.1 with your LAPTOP IP:
+
+   debug:
+   enabled: true
+   host: "YOUR.LAPTOP.IP.HERE"
+   port: 9876
+
+Example:
+
+debug:
+enabled: true
+host: "192.168.1.42"
+port: 9876
+
+4. Save the file
+
+NOTE:
+127.0.0.1 means “send to myself” (Jetson only).
+You MUST change this to your laptop IP.
+
+---
+
+## STEP 3 — START LIVE VIEWER ON LAPTOP
+
+On your LAPTOP:
+
+1. Open PowerShell
+
+2. Navigate to your repo:
+
+   cd C:\Users\YourName\experiment
+
+3. Activate your virtual environment (if using one):
+
+   ..venv\Scripts\Activate
+
+4. Run the viewer:
+
+   python -m rover_navigation.debug.live_viewer --bind-host 0.0.0.0 --bind-port 9876
+
+5. Leave this window open
+
+A window should appear waiting for incoming data.
+
+---
+
+## STEP 4 — START ROVER CODE ON JETSON
+
+On the JETSON:
+
+1. Navigate to your repo:
+
+   cd ~/experiment
+
+2. Activate your environment:
+
+   source .venv/bin/activate
+
+3. Run the main pipeline:
+
+   python -m rover_navigation.main
+
+This will:
+
+* load scans
+* run inference
+* build maps
+* plan paths
+* send debug data to your laptop
+
+---
+
+## STEP 5 — VERIFY IT WORKS
+
+If everything is correct:
+
+* The laptop window will update continuously
+* You will see:
+
+  * occupancy grid
+  * planned path (red)
+  * rover position (green)
+  * goal (blue/cyan)
+
+---
+
+## STEP 6 — TROUBLESHOOTING
+
+If NOTHING appears:
+
+1. Check both devices are on the SAME network
+
+2. Verify dataset.yaml has the correct laptop IP
+
+3. Make sure the viewer is running BEFORE the Jetson code
+
+4. Check Windows Firewall:
+
+   * Allow Python through firewall
+   * Allow UDP on port 9876
+
+---
+
+## STEP 7 — LOCAL TEST (NO NETWORK)
+
+To test on ONE machine:
+
+Set in dataset.yaml:
+
+host: "127.0.0.1"
+
+Open TWO terminals:
+
+Terminal 1:
+python -m rover_navigation.debug.live_viewer --bind-host 127.0.0.1 --bind-port 9876
+
+Terminal 2:
+python -m rover_navigation.main
+
+If this works, your code is correct and any issue is networking.
+
+---
+
+## SUMMARY
+
+JETSON runs:
+python -m rover_navigation.main
+
+LAPTOP runs:
+python -m rover_navigation.debug.live_viewer
+
+Jetson sends data → Laptop displays it
+
+---
+
+## END

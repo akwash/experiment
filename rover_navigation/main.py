@@ -238,7 +238,7 @@ def main() -> None:
     # allowable range x: 0 to 4.4 m, 0 to <15 ft
     # allowable range y: 0 to 4.4 m, 0 to < 15 ft
     rover_pose_xy = (0 * 0.3048, 4 * 0.3048)
-    goal_pose_xy = (8 * 0.3048, 4 * 0.3048)
+    goal_pose_xy = (0 * 0.3048, 4 * 0.3048)
 
     # inital rover state set after 1st scan
     rover_heading = 0.0
@@ -264,9 +264,9 @@ def main() -> None:
 
         points_local = sensor_to_rover_local(points_sensor) # convert sensor cords to local frame
         points_world = transform_local_to_world(
-            points_local=points_local,
-            rover_pose_xy=rover_pose_xy,
-            heading_rad=rover_heading,
+            points_local,
+            rover_pose_xy,
+            rover_heading,
         )
 
         # build occupancy map from predictions and world points
