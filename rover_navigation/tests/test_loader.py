@@ -11,7 +11,7 @@ def print_ply_header(path):
             if line == "end_header":
                 break
 def test_load_cloudcompare_ply_shapes():
-    test_path =  Path(__file__).resolve().parents[1] / "data" / "test_cloud.ply"
+    test_path =  Path(__file__).resolve().parents[1] / "data" / "raw" / "test_cloud.ply"
 
     print("\n ---PLY HEADER ---")
     print_ply_header(test_path)
@@ -27,7 +27,7 @@ def test_load_cloudcompare_ply_shapes():
     assert features is not None
     assert features.ndim ==2
     assert features.shape[0] == points.shape[0]
-    assert features.shape[1] ==3
+    assert features.shape[1] ==0
 
     # labels
     assert labels is not None

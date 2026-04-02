@@ -4,7 +4,7 @@ from rover_navigation.mapping.occupancy_map import OccupancyMap, OBSTACLE, UNOCC
 
 def test_calculate_key_mono():
     m = OccupancyMap(5,5)
-    dstar = DStarLite(m, OccupancyMap, (0,0), (4,4))
+    dstar = DStarLite(m, (0,0), (4,4))
 
     k_goal = dstar.calculate_key(dstar.s_goal)
     k_start = dstar.calculate_key(dstar.s_start)
@@ -13,7 +13,7 @@ def test_calculate_key_mono():
 
 def test_cost_free_and_obstacle():
     m = OccupancyMap(5,5)
-    dstar = DStarLite(m, OccupancyMap, (0,0), (4,4))
+    dstar = DStarLite(m, (0,0), (4,4))
 
     c_free = dstar.c((0,0), (3,4))
     assert c_free == math.sqrt(3**2 + 4**2)

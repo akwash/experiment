@@ -4,10 +4,11 @@ from rover_navigation.mapping.occupancy_map import OccupancyMap, OBSTACLE, UNOCC
 
 def test_dstar_init():
     m = OccupancyMap(5,5)
-    dstar = DStarLite(map = m,
-                      OccupancyMap = OccupancyMap,
-                      s_start = (0,0),
-                      s_goal = (4,4))
+    dstar = DStarLite(
+        map=m,
+        s_start=(0,0),
+        s_goal=(4,4),
+    )
     
     assert dstar.s_start == (0,0)
     assert dstar.s_goal == (4,4)

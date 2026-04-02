@@ -1,26 +1,24 @@
 from rover_navigation.perception.infer import run_inference
 from rover_navigation.mapping.occupancy_map import (
     build_map_from_predictions,
-    transform_to_world,
+    sensor_to_rover_local,
+    transform_local_to_world,
     world_to_grid,
     SLAM,
 )
 from rover_navigation.planning.dstar_lite import DStarLite
-import numpy as np
 
 
 def run_navigation(
     ply_path: str,
     rover_pose_xy: tuple[float, float],
     goal_pose_xy: tuple[float, float],
+    rover_heading: float = 0.0,
 ):
     # perception
     points, true_labels, pred_labels = run_inference(ply_path)
-    heading_rad = np.arctan2(
-        goal_pose_xy[1] - rover_pose_xy[1],
-        goal_pose_xy[0] - rover_pose_xy[0],
-    )
-    points_world = transform_to_world(points, rover_pose_xy, heading_rad)
+    points_local = sensor_to_rover_local(points)
+    points_world = transform_local_to_world(points_local, rover_pose_xy, rover_heading)
 
     # get the map from predictions
     truth_map, grid_info = build_map_from_predictions(

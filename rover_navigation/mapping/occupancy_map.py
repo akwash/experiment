@@ -1,7 +1,6 @@
 import numpy as np
 from rover_navigation.util.utils import get_movements_4n, get_movements_8n, heuristic, Vertices, Vertex
 from typing import Dict, List
-import matplotlib.pyplot as plt
 
 
 # set values for occupied and unoccupied cells in the map
