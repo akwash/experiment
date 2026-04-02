@@ -72,3 +72,9 @@ debug:
   enabled: true
   host: "127.0.0.1" # localhost ip address
   port: 9876 # default port for JSON sender
+
+control:
+  goal_input_enabled: true
+  bind_host: "0.0.0.0"
+  bind_port: 9877 # operator -> Jetson UDP goal commands
+  poll_timeout_s: 0.001

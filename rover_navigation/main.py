@@ -29,6 +29,7 @@ from rover_navigation.planning.dstar_lite import DStarLite
 from rover_navigation.debug.debug_transport import DebugSender, UdpJsonSender
 from rover_navigation.debug.rover_debug_sender import send_planning_debug
 from rover_navigation.rover.motion import update_rover_pose_from_motion
+from rover_navigation.control.goal_transport import UdpJsonGoalReceiver
 
 
 # create the file paths so that it doesnt matter where its run from
@@ -230,6 +231,22 @@ def main() -> None:
     debug_sender = build_debug_sender(dataset_cfg)
     scans = resolve_scans(dataset_cfg) # load scans based on settings
 
+    control_cfg = dataset_cfg.get("control", {})
+    goal_receiver = None
+    if bool(control_cfg.get("goal_input_enabled", False)):
+        bind_host = str(control_cfg.get("bind_host", "0.0.0.0"))
+        bind_port = int(control_cfg.get("bind_port", 9877))
+        poll_timeout_s = float(control_cfg.get("poll_timeout_s", 0.001))
+        goal_receiver = UdpJsonGoalReceiver(
+            bind_host=bind_host,
+            bind_port=bind_port,
+            timeout_s=poll_timeout_s,
+        )
+        print(
+            f"[CONTROL] Goal input enabled. Listening on UDP {bind_host}:{bind_port} "
+            f"(non-blocking poll). Operator should run goal_sender on the laptop."
+        )
+
     print(f"\nUsing scan_mode: {dataset_cfg['paths'].get('scan_mode', 'file')}")
     print(f"Found {len(scans)} scan(s).")
 
@@ -237,8 +254,8 @@ def main() -> None:
     # NEED TO UPDATE FOR ACTUAL MAP
     # allowable range x: 0 to 4.4 m, 0 to <15 ft
     # allowable range y: 0 to 4.4 m, 0 to < 15 ft
-    rover_pose_xy = (0 * 0.3048, 4 * 0.3048)
-    goal_pose_xy = (0 * 0.3048, 4 * 0.3048)
+    rover_pose_xy = (2 * 0.3048, 5 * 0.3048)
+    goal_pose_xy = (4 * 0.3048, 0 * 0.3048)
 
     # inital rover state set after 1st scan
     rover_heading = 0.0
@@ -297,6 +314,21 @@ def main() -> None:
         )
         planning_map.set_map(persistent_map.get_map().copy()) # use fused map for planning
         planning_map.inflate(radius=2) # inflate obstacles (Safety margin)
+
+        # Optional operator goal updates (laptop -> Jetson over UDP)
+        if goal_receiver is not None:
+            latest_goal_cmd = goal_receiver.recv_latest()
+            if latest_goal_cmd is not None:
+                goal_row, goal_col = latest_goal_cmd.goal_cell
+                map_rows, map_cols = planning_map.get_map().shape
+                if (0 <= goal_row < map_rows) and (0 <= goal_col < map_cols):
+                    goal_grid_pos = (goal_row, goal_col)
+                    print(f"[CONTROL] New goal received: goal_cell=(row={goal_row}, col={goal_col})")
+                else:
+                    print(
+                        f"[CONTROL] Ignoring out-of-bounds goal: (row={goal_row}, col={goal_col}) "
+                        f"for map shape (rows={map_rows}, cols={map_cols})."
+                    )
 
         assert current_grid_pos is not None
         assert goal_grid_pos is not None
