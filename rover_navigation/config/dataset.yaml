@@ -18,9 +18,22 @@ dataset:
 paths:
   raw_dir: "rover_navigation/data/raw"
   processed_dir: "rover_navigation/data/processed"
+  # Scan input: file (csv/ply) or numpy arrays on disk — see scan_mode below.
   # this is if using the ply:
   # test_file: "rover_navigation/data/raw/pos1_2box.ply"
   test_file: "rover_navigation/data/raw/BigObstacles_pos3_High.csv"
+  # scan_mode: file  -> use test_file (single csv/ply or directory of scans)
+  # scan_mode: numpy -> use numpy_scan or numpy_scan_dir (.npy / .npz with xyz or points)
+  scan_mode: file
+  # When test_file is a directory, which files to include (default: csv only for backward compat)
+  scan_glob: "*.csv"
+  # numpy_mode examples (set scan_mode: numpy):
+  # numpy_scan: "rover_navigation/data/raw/one_scan.npy"
+  # numpy_scan_dir: "rover_navigation/data/in_situ_scans"
+  # numpy_scan_glob: "*.npy"
+  numpy_scan: null
+  numpy_scan_dir: null
+  numpy_scan_glob: "*.npy"
 
 point_cloud:
   # this is if using the ply:
@@ -55,7 +68,7 @@ sampling:
   sub_sampling_ratio: [4, 4, 4, 4]
   d_out: [16, 64, 128, 256]
 
-  debug:
+debug:
   enabled: true
   host: "127.0.0.1" # localhost ip address
   port: 9876 # default port for JSON sender

@@ -4,7 +4,7 @@
 
 # Description: inference pipeline for running the trained model on
 # new LiDAR point clouds. Performs following steps:
-# 1. Load ply point cloud file
+# 1. Load ply/csv point cloud file, or accept (N,3) numpy XYZ
 # 2. Preprocess point cloud into model input format
 # 3. Construct model
 # 4. Load trained model weights
@@ -18,9 +18,9 @@
 #   pred_labels -> predicted semantic classes
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-import open3d as o3d
 import torch
 
 from rover_navigation.preprocessing.load_ply import load_cloudcompare_ply
@@ -74,13 +74,56 @@ def load_point_cloud_for_inference(
         f"Expected .ply or .csv"
     )
 
-# build input batch for inference
-# input: ply file path, dataset config
-# output: dictionary with: features, labels, xyz, neigh_idx, sub_idx, interp_idx
-def build_inference_batch(
-    ply_path: str,
+def build_inference_batch_from_xyz(
+    points_xyz: np.ndarray,
+    features: np.ndarray | None = None,
     dataset_config_path: str | Path = DATASET_CONFIG,
-):
+    log_label: str = "numpy xyz",
+) -> tuple[dict, np.ndarray, np.ndarray]:
+    """
+    Build a RandLA-Net inference batch from in-memory point coordinates.
+
+    :param points_xyz: (N, 3) array of XYZ in meters (same units as file-based loads).
+    :param features: optional (N, F) per-point features. If None, uses empty features (N, 0)
+        like CSV inference.
+    :param dataset_config_path: dataset YAML for preprocessing/sampling.
+    :param log_label: string printed when building the batch (for debugging).
+    :return: batch dict, sampled_idx, vis_points (subsampled raw xyz for visualization).
+    """
+    points = np.asarray(points_xyz, dtype=np.float32)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError(f"points_xyz must be (N, 3), got shape {points.shape}")
+
+    if features is None:
+        features = np.zeros((points.shape[0], 0), dtype=np.float32)
+    else:
+        features = np.asarray(features, dtype=np.float32)
+        if features.ndim != 2 or features.shape[0] != points.shape[0]:
+            raise ValueError(
+                f"features must be (N, F) with N={points.shape[0]}, got {features.shape}"
+            )
+
+    labels = np.full(points.shape[0], -1, dtype=np.int64)
+
+    return _build_inference_batch_from_arrays(
+        points=points,
+        features=features,
+        labels=labels,
+        dataset_config_path=dataset_config_path,
+        log_label=log_label,
+    )
+
+
+def _build_inference_batch_from_arrays(
+    points: np.ndarray,
+    features: np.ndarray,
+    labels: np.ndarray,
+    dataset_config_path: str | Path,
+    log_label: str,
+) -> tuple[dict, np.ndarray, np.ndarray]:
+    """
+    Shared batch construction from aligned points, features, and labels arrays.
+    """
     dataset_cfg = load_yaml(dataset_config_path)
 
     prep_cfg = dataset_cfg["preprocessing"]
@@ -97,8 +140,6 @@ def build_inference_batch(
     num_layers = int(sampling_cfg["num_layers"])
     sub_sampling_ratio = list(sampling_cfg["sub_sampling_ratio"])
 
-    # load point cloud data
-    points, features, labels = load_point_cloud_for_inference(ply_path)
     assert points.ndim == 2 and points.shape[1] == 3, "Points must be (N, 3)"
     assert features.ndim == 2, "Features must be (N, F)"
     assert labels.ndim == 1 and labels.shape[0] == points.shape[0], \
@@ -167,8 +208,7 @@ def build_inference_batch(
 
         current_xyz = sampled_xyz
 
-
-    print("Running inference on:", ply_path)
+    print("Running inference on:", log_label)
 
     # build batch dictionary
     batch = {
@@ -183,6 +223,23 @@ def build_inference_batch(
     return batch, sampled_idx, vis_points
 
 
+# build input batch for inference
+# input: ply file path, dataset config
+# output: dictionary with: features, labels, xyz, neigh_idx, sub_idx, interp_idx
+def build_inference_batch(
+    ply_path: str,
+    dataset_config_path: str | Path = DATASET_CONFIG,
+):
+    points, features, labels = load_point_cloud_for_inference(ply_path)
+    return _build_inference_batch_from_arrays(
+        points=points,
+        features=features,
+        labels=labels,
+        dataset_config_path=dataset_config_path,
+        log_label=str(ply_path),
+    )
+
+
 # helper function for moving the batch tensors to the correct device
 def move_batch_to_device(batch: dict, device: torch.device) -> dict:
     moved = {}
@@ -194,20 +251,15 @@ def move_batch_to_device(batch: dict, device: torch.device) -> dict:
     return moved
 
 
-# function to run inference on a ply file using the trained model
-def run_inference(
-    ply_path: str,  # path to input ply file
-    model_path: str | Path = Path("checkpoints") / "randlanet.pt",
+def _run_inference_from_batch(
+    batch: dict,
+    vis_points: np.ndarray,
+    model_path: str | Path,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    
-    # set device
+    """Load weights, run forward pass, return vis_points, true_labels, pred_labels."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # build the batch
-    batch, sampled_idx, vis_points = build_inference_batch(ply_path)
     true_labels = batch["labels"].squeeze(0).cpu().numpy()
 
-    # load the model
     model = RandLANet(
         dataset_config_path=DATASET_CONFIG,
         training_config_path=TRAINING_CONFIG,
@@ -224,37 +276,50 @@ def run_inference(
     model.load_state_dict(state_dict)
     model.eval()
 
-    # move the batch to the device
     batch = move_batch_to_device(batch, device)
 
-    # run inference
     with torch.no_grad():
-        logits = model(batch)                # (1, N, num_classes)
-        pred = torch.argmax(logits, dim=-1)  # (1, N)
+        logits = model(batch)
+        pred = torch.argmax(logits, dim=-1)
 
-    # convert the predictions to numpy
     pred = pred.squeeze(0).cpu().numpy()
-
-    # Check to see if there are obstacle labels being passed through
-    # unique = np.unique(pred)
-    # print("Unique predicted labels:", unique)
-
-    # contains_0 = 0 in unique
-    # contains_1 = 1 in unique
-
-    # print("Contains 0:", contains_0)
-    # print("Contains 1:", contains_1)
-    # num_ones = np.sum(pred == 1)
-    # print("Number of ones:", num_ones)
-
     return vis_points, true_labels, pred
+
+
+# function to run inference on a ply file using the trained model
+def run_inference(
+    ply_path: str,  # path to input ply file
+    model_path: str | Path = Path("checkpoints") / "randlanet.pt",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    batch, _sampled_idx, vis_points = build_inference_batch(ply_path)
+    return _run_inference_from_batch(batch, vis_points, model_path)
+
+
+def run_inference_from_xyz(
+    points_xyz: np.ndarray,
+    features: np.ndarray | None = None,
+    model_path: str | Path = Path("checkpoints") / "randlanet.pt",
+    dataset_config_path: str | Path = DATASET_CONFIG,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Run semantic segmentation on an in-memory point cloud (N, 3) XYZ.
+
+    Same preprocessing and model as :func:`run_inference`, without reading a file.
+    Optional ``features`` is (N, F); if omitted, empty features (N, 0) are used like CSV loads.
+    """
+    batch, _sampled_idx, vis_points = build_inference_batch_from_xyz(
+        points_xyz,
+        features=features,
+        dataset_config_path=dataset_config_path,
+    )
+    return _run_inference_from_batch(batch, vis_points, model_path)
 
 
 # helper function to create a colored Open3D point cloud
 def create_colored_point_cloud(
     points: np.ndarray,
     labels: np.ndarray,
-) -> o3d.geometry.PointCloud:
+) -> Any:
     """
     Build an Open3D point cloud and color it by class label.
 
@@ -262,6 +327,8 @@ def create_colored_point_cloud(
     class 1 -> red
     unknown -> blue
     """
+    import open3d as o3d  # optional dependency for visualization only
+
     if points.ndim != 2 or points.shape[1] != 3:
         raise ValueError(f"Expected points shape (N, 3), got {points.shape}")
 
@@ -290,6 +357,8 @@ def visualize_predictions(
     pred_labels: np.ndarray,
     window_name: str = "Predicted Labels",
 ) -> None:
+    import open3d as o3d
+
     pcd = create_colored_point_cloud(points, pred_labels)
     o3d.visualization.draw_geometries([pcd], window_name=window_name)
 
@@ -300,6 +369,8 @@ def visualize_ground_truth(
     true_labels: np.ndarray,
     window_name: str = "Ground Truth Labels",
 ) -> None:
+    import open3d as o3d
+
     pcd = create_colored_point_cloud(points, true_labels)
     o3d.visualization.draw_geometries([pcd], window_name=window_name)
 
