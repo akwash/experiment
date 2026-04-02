@@ -44,8 +44,8 @@ def main() -> None:
     # NEED TO UPDATE FOR ACTUAL MAP
     # allowable range x: 0 to 4.4 m, 0 to <15 ft
     # allowable range y: 0 to 4.4 m, 0 to < 15 ft
-    rover_pose_xy = (3 * 0.3048, 3 * 0.3048)
-    goal_pose_xy = (9 * 0.3048, 4 * 0.3048)
+    rover_pose_xy = (0 * 0.3048, 4 * 0.3048)
+    goal_pose_xy = (8 * 0.3048, 4 * 0.3048)
 
     
     # Run semantic segmentation using RandLA-Net
@@ -57,11 +57,20 @@ def main() -> None:
     print(f"Total points: {len(points)}")
     print(f"Unique predicted labels: {np.unique(pred_labels)}")
 
+
+    # get initial heading
+    initial_heading = np.arctan2(
+        goal_pose_xy[1] - rover_pose_xy[1],
+        goal_pose_xy[0] - rover_pose_xy[0]
+    )
+    
+    points_world = transform_to_world(points, rover_pose_xy, initial_heading) # transform point cloud to world frame based on current position
+    
     # Build occupancy map from predictions
     
     print("\nBuilding occupancy map...")
     truth_map, grid_info = build_map_from_predictions(
-        points,
+        points_world,
         pred_labels,
         grid_resolution=0.1524,
         obstacle_label=1,
@@ -137,27 +146,30 @@ def main() -> None:
 
     slam = SLAM(map=truth_map, view_range=2) 
     
-    for step_idx, grid_pos in enumerate(path):
-        heading = heading_from_path(path, step_idx) # get heading in world frame for the current step
-        
+    step_idx = 0
+    max_steps = len(path) * 3  # safety limit to prevent infinite loop
+    steps_taken = 0
 
-    world_x, world_y = grid_to_world(grid_pos[0], grid_pos[1], grid_info) # convert grid to world coords
-    points_world = transform_to_world(points, (world_x, world_y), heading) # transform point cloud to world frame based on current position
+    while step_idx < len(path):
+        if steps_taken > max_steps:
+            print("Max steps exceeded, stopping.")
+            break
 
-    # update the map with the new transformed scan
-    new_map, _ = build_map_from_predictions(
-        points_world,
-        pred_labels,
-        grid_resolution=0.1524,
-        obstacle_label=1,
-    )
-    slam.slam_map.set_map(new_map.get_map()) # update the slam map with map from current scan
+        grid_pos = path[step_idx]
+        heading = heading_from_path(path, step_idx)
 
-    changed_vertices, updated_map = slam.rescan(global_pos=grid_pos) # get the changed vertices
+        # update SLAM with local observations at current position
+        changed_vertices, updated_map = slam.rescan(global_pos=grid_pos)
 
-    if len(changed_vertices.vertices) > 0:
-        print(f"New obstacles at step {step_idx}, replanning...")
-        path, g, rhs = planner.move_and_replan(robot_position=grid_pos)
+        if len(changed_vertices.vertices) > 0:
+            print(f"New obstacles at step {step_idx}, replanning...")
+            path, g, rhs = planner.move_and_replan(robot_position=grid_pos)
+            max_steps = len(path) * 3  # update limit for new path
+            step_idx = 0
+        else:
+            step_idx += 1
+
+        steps_taken += 1
 
     grid = truth_map.get_map() # get final grid for visualization
 

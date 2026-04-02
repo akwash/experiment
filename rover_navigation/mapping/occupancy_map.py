@@ -342,26 +342,70 @@ def visualize_empty_grid(omap):
     plt.title("Grid")
     plt.show()
 
-def transform_to_world(points, rover_pose_xy, heading_rad):
+def transform_to_world(
+    points: np.ndarray,
+    rover_pose_xy: tuple[float, float],
+    heading_rad: float,
+    lidar_to_body_rotation: np.ndarray | None = None,
+    lidar_to_body_translation: np.ndarray | None = None,
+) -> np.ndarray:
     """
-    Transform local sensor frame points into world frame.
-    points: (N,3) xyz in local sensor frame
-    :param rover_pose_xy: (x, y) world position of rover in meters
-    :paramheading_rad: rover yaw angle in radians
-    :return: (N,3) points in world frame
+    Transform LiDAR-frame points into world frame.
+
+    Frame pipeline:
+      lidar -> body -> world
+
+    Conventions used here:
+      - world/body x is forward, y is left, z is up
+      - heading_rad is rover yaw in radians, positive CCW in world XY
+      - points are row vectors with shape (N, 3)
+
+    Defaults:
+      - lidar_to_body_rotation maps LiDAR x-right/y-forward to body x-forward/y-left
+      - lidar_to_body_translation is zero (sensor origin at body origin)
     """
-    cos_h = np.cos(heading_rad) # rot matrix
-    sin_h = np.sin(heading_rad) # rot matrix
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError(f"Expected points shape (N, 3), got {points.shape}")
 
-    R = np.array([[cos_h, -sin_h],
-                  [sin_h,  cos_h]]) # yaw rotation matrix
+    if lidar_to_body_rotation is None:
+        # [x_b, y_b, z_b] = [y_l, -x_l, z_l]
+        lidar_to_body_rotation = np.array(
+            [
+                [0.0, 1.0, 0.0],
+                [-1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            dtype=np.float32,
+        )
 
-    xy_local = points[:, :2] # local xy coords
-    xy_world = (R @ xy_local.T).T + np.array(rover_pose_xy) # world xy coords after rot and transl
+    if lidar_to_body_translation is None:
+        lidar_to_body_translation = np.zeros(3, dtype=np.float32)
 
-    points_world = points.copy() # change xy to world
-    points_world[:, :2] = xy_world # update xy to world
-    return points_world
+    if lidar_to_body_rotation.shape != (3, 3):
+        raise ValueError(
+            f"Expected lidar_to_body_rotation shape (3, 3), got {lidar_to_body_rotation.shape}"
+        )
+    if lidar_to_body_translation.shape != (3,):
+        raise ValueError(
+            f"Expected lidar_to_body_translation shape (3,), got {lidar_to_body_translation.shape}"
+        )
+
+    cos_h = np.cos(heading_rad)
+    sin_h = np.sin(heading_rad)
+    world_from_body = np.array(
+        [
+            [cos_h, -sin_h, 0.0],
+            [sin_h, cos_h, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float32,
+    )
+
+    body_points = points @ lidar_to_body_rotation.T + lidar_to_body_translation
+    world_points = body_points @ world_from_body.T
+    world_points[:, 0] += rover_pose_xy[0]
+    world_points[:, 1] += rover_pose_xy[1]
+    return world_points.astype(np.float32, copy=False)
 
 if __name__ == "__main__":
     # create a test map
