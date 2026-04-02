@@ -18,14 +18,15 @@ import matplotlib.pyplot as plt
 from rover_navigation.util.config_loader import load_yaml
 from rover_navigation.perception.infer import run_inference
 from rover_navigation.mapping.occupancy_map import (
-    SLAM,
     build_map_from_predictions,
-    grid_to_world,
-    transform_to_world,
+    sensor_to_rover_local,
+    transform_local_to_world,
     world_to_grid,
+    OccupancyMap,
 )
 from rover_navigation.planning.dstar_lite import DStarLite
-from rover_navigation.rover.position_finder import heading_from_path
+from rover_navigation.debug.debug_transport import DebugSender, UdpJsonSender
+from rover_navigation.debug.rover_debug_sender import send_planning_debug
 
 
 # create the file paths so that it doesnt matter where its run from
@@ -33,12 +34,101 @@ ROOT = Path(__file__).resolve().parent
 DATASET_CONFIG = ROOT / "config" / "dataset.yaml"
 
 
+def load_scan_sequence(scan_input: str | Path) -> list[Path]:
+    """
+    Load a sequence of CSV scans from a directory or a single CSV file path.
+    Returns paths in sorted order for repeatable replay.
+    """
+    scan_input = Path(scan_input)
+    if scan_input.is_file():
+        if scan_input.suffix.lower() != ".csv":
+            raise ValueError(f"Expected a CSV scan file, got: {scan_input}")
+        return [scan_input]
+
+    if not scan_input.exists():
+        raise FileNotFoundError(f"Scan path not found: {scan_input}")
+    if not scan_input.is_dir():
+        raise ValueError(f"Expected file or directory for scans, got: {scan_input}")
+
+    scans = sorted(scan_input.glob("*.csv"))
+    if not scans:
+        raise ValueError(f"No CSV scans found in directory: {scan_input}")
+    return scans
+
+
+def fuse_scan_into_global_map(
+    global_map: OccupancyMap | None,
+    scan_map: OccupancyMap,
+) -> OccupancyMap:
+    """
+    Fuse current scan map into persistent map via occupied-cell union.
+    """
+    if global_map is None:
+        fused = OccupancyMap(
+            x_dim=scan_map.x_dim,
+            y_dim=scan_map.y_dim,
+            movement_setting=scan_map.movement_setting,
+        )
+        fused.set_map(scan_map.get_map().copy())
+        return fused
+
+    if (global_map.x_dim != scan_map.x_dim) or (global_map.y_dim != scan_map.y_dim):
+        raise ValueError("Map dimensions differ; cannot fuse scan map into global map.")
+
+    fused_grid = np.maximum(global_map.get_map(), scan_map.get_map())
+    global_map.set_map(fused_grid)
+    return global_map
+
+
+def move_rover_along_path(
+    path: list[tuple[int, int]],
+    current_pos: tuple[int, int],
+    max_steps: int,
+) -> tuple[tuple[int, int], list[tuple[int, int]]]:
+    """
+    Simulate rover motion by advancing a limited number of path steps.
+    Returns new rover grid position and the moved segment (including start).
+    """
+    if not path:
+        return current_pos, [current_pos]
+    if len(path) == 1:
+        return path[0], [path[0]]
+
+    steps = max(1, int(max_steps))
+    move_count = min(steps, len(path) - 1)
+    moved_segment = path[: move_count + 1]
+    new_pos = moved_segment[-1]
+    return new_pos, moved_segment
+
+
+def build_debug_sender(dataset_cfg: dict) -> DebugSender | None:
+    """
+    Create optional debug sender from config.
+
+    Expected optional config block:
+      debug:
+        enabled: false
+        host: "127.0.0.1"
+        port: 9876
+    """
+    debug_cfg = dataset_cfg.get("debug", {})
+    if not bool(debug_cfg.get("enabled", False)):
+        return None
+
+    host = str(debug_cfg.get("host", "127.0.0.1"))
+    port = int(debug_cfg.get("port", 9876))
+    return UdpJsonSender(host=host, port=port)
+
+
 def main() -> None:
     # load the dataset configuration
     dataset_cfg = load_yaml(DATASET_CONFIG)
-    ply_path = dataset_cfg["paths"]["test_file"]
+    debug_sender = build_debug_sender(dataset_cfg)
+    scan_input = dataset_cfg["paths"]["test_file"]
+    scan_paths = load_scan_sequence(scan_input)
 
-    print(f"\nUsing point cloud: {ply_path}")
+    print(f"\nUsing scan source: {scan_input}")
+    print(f"Found {len(scan_paths)} scan file(s).")
 
     # rover start and goal in the world coordiantes (meters)
     # NEED TO UPDATE FOR ACTUAL MAP
@@ -47,160 +137,125 @@ def main() -> None:
     rover_pose_xy = (0 * 0.3048, 4 * 0.3048)
     goal_pose_xy = (8 * 0.3048, 4 * 0.3048)
 
-    
-    # Run semantic segmentation using RandLA-Net
-   
-    print("\nRunning RandLA-Net inference...")
-    points, true_labels, pred_labels = run_inference(ply_path)
+    # rover heading should come from localization/odometry
+    rover_heading = 0.0
+    steps_per_cycle = 3
+    persistent_map: OccupancyMap | None = None
+    current_grid_pos: tuple[int, int] | None = None
+    goal_grid_pos: tuple[int, int] | None = None
+    traveled_path: list[tuple[int, int]] = []
+    final_path: list[tuple[int, int]] = []
 
-    print("Inference complete.")
-    print(f"Total points: {len(points)}")
-    print(f"Unique predicted labels: {np.unique(pred_labels)}")
+    grid_info = None
 
+    for scan_idx, scan_path in enumerate(scan_paths, start=1):
+        print(f"\n[{scan_idx}/{len(scan_paths)}] Processing scan: {scan_path}")
+        points_sensor, _true_labels, pred_labels = run_inference(scan_path)
 
-    # get initial heading
-    initial_heading = np.arctan2(
-        goal_pose_xy[1] - rover_pose_xy[1],
-        goal_pose_xy[0] - rover_pose_xy[0]
-    )
-    
-    points_world = transform_to_world(points, rover_pose_xy, initial_heading) # transform point cloud to world frame based on current position
-    
-    # Build occupancy map from predictions
-    
-    print("\nBuilding occupancy map...")
-    truth_map, grid_info = build_map_from_predictions(
-        points_world,
-        pred_labels,
-        grid_resolution=0.1524,
-        obstacle_label=1,
-    )
-    # Check to see if there are obstacle labels being passed through
-    unique = np.unique(pred_labels)
-    print("Unique predicted labels:", unique)
+        points_local = sensor_to_rover_local(points_sensor)
+        points_world = transform_local_to_world(
+            points_local=points_local,
+            rover_pose_xy=rover_pose_xy,
+            heading_rad=rover_heading,
+        )
 
-    contains_0 = 0 in unique
-    contains_1 = 1 in unique
+        scan_map, scan_grid_info = build_map_from_predictions(
+            points_world,
+            pred_labels,
+            grid_resolution=0.1524,
+            obstacle_label=1,
+        )
 
-    print("Contains 0:", contains_0)
-    print("Contains 1:", contains_1)
-    num_ones = np.sum(pred_labels == 1)
-    print("Number of ones:", num_ones)
+        if grid_info is None:
+            grid_info = scan_grid_info
+            current_grid_pos = world_to_grid(rover_pose_xy[0], rover_pose_xy[1], grid_info)
+            goal_grid_pos = world_to_grid(goal_pose_xy[0], goal_pose_xy[1], grid_info)
+            print(f"Start (grid): {current_grid_pos}")
+            print(f"Goal  (grid): {goal_grid_pos}")
+        else:
+            if scan_grid_info != grid_info:
+                raise ValueError("Grid info changed between scans; expected fixed grid geometry.")
 
-    # inflate obstacles for rover safety margin
-    truth_map.inflate(radius=2)
+        persistent_map = fuse_scan_into_global_map(persistent_map, scan_map)
 
-    grid = truth_map.get_map()
+        planning_map = OccupancyMap(
+            x_dim=persistent_map.x_dim,
+            y_dim=persistent_map.y_dim,
+            movement_setting=persistent_map.movement_setting,
+        )
+        planning_map.set_map(persistent_map.get_map().copy())
+        planning_map.inflate(radius=2)
 
+        assert current_grid_pos is not None
+        assert goal_grid_pos is not None
 
-    # check to see if the obstacle cells are within the bounds of the map
-    rows, cols = grid.shape
-    obs_r, obs_c = np.where(grid == 1)
-    invalid = np.where(
-    (obs_r < 0) | (obs_r >= rows) |
-    (obs_c < 0) | (obs_c >= cols)
-    )[0]
+        planner = DStarLite(map=planning_map, s_start=current_grid_pos, s_goal=goal_grid_pos)
+        path, _g, _rhs = planner.move_and_replan(robot_position=current_grid_pos)
+        final_path = path
 
-    if len(invalid) > 0:
-        print("ERROR: Some obstacle cells are out of bounds!")
-        print("Example:", list(zip(obs_r[invalid][:10], obs_c[invalid][:10])))
-    else:
-        print("All obstacle cells fall within map bounds.")
-
-
-    # debugging checks
-    # Convert start and goal into grid cells
-    start = world_to_grid(rover_pose_xy[0], rover_pose_xy[1], grid_info)
-    goal = world_to_grid(goal_pose_xy[0], goal_pose_xy[1], grid_info)
-
-    rows, cols = truth_map.get_map().shape
-
-    print(f"Start world: {rover_pose_xy}")
-    print(f"Goal world: {goal_pose_xy}")
-    print(f"Start (grid): {start}")
-    print(f"Goal (grid): {goal}")
-    print("Grid shape:", (rows, cols))
-    print("Grid info:", grid_info)
-
-    max_x = grid_info["min_x"] + (cols - 1) * grid_info["resolution"]
-    max_y = grid_info["min_y"] + (rows - 1) * grid_info["resolution"]
-
-    print("Map x range:", grid_info["min_x"], "to", max_x)
-    print("Map y range:", grid_info["min_y"], "to", max_y)
-
-    for name, node in [("start", start), ("goal", goal)]:
-        r, c = node
-        if not (0 <= r < rows and 0 <= c < cols):
-            raise ValueError(
-                f"{name} {node} is outside map bounds. "
-                f"Valid rows: 0..{rows-1}, cols: 0..{cols-1}"
+        if debug_sender is not None:
+            send_planning_debug(
+                sender=debug_sender,
+                step_idx=scan_idx,
+                heading_rad=rover_heading,
+                occupancy_grid=planning_map.get_map(),
+                path=path,
+                rover_cell=current_grid_pos,
+                goal_cell=goal_grid_pos,
             )
-    
-    # Run D* Lite planner
-    print("\nRunning D* Lite planning...")
-    planner = DStarLite(map=truth_map, s_start=start, s_goal=goal) # planner takes in inflated obstacles
-    path, g, rhs = planner.move_and_replan(robot_position=start) 
 
-    print("Planning complete.")
-    print(f"Path length: {len(path)}")
+        current_grid_pos, moved_segment = move_rover_along_path(
+            path=path,
+            current_pos=current_grid_pos,
+            max_steps=steps_per_cycle,
+        )
+        if not traveled_path:
+            traveled_path.extend(moved_segment)
+        else:
+            traveled_path.extend(moved_segment[1:])
 
-    slam = SLAM(map=truth_map, view_range=2) 
-    
-    step_idx = 0
-    max_steps = len(path) * 3  # safety limit to prevent infinite loop
-    steps_taken = 0
+        print(f"Planned path length: {len(path)}")
+        print(f"Moved to: {current_grid_pos}")
 
-    while step_idx < len(path):
-        if steps_taken > max_steps:
-            print("Max steps exceeded, stopping.")
+        if current_grid_pos == goal_grid_pos:
+            print("Goal reached.")
             break
 
-        grid_pos = path[step_idx]
-        heading = heading_from_path(path, step_idx)
+    if persistent_map is None:
+        raise RuntimeError("No scans were processed.")
 
-        # update SLAM with local observations at current position
-        changed_vertices, updated_map = slam.rescan(global_pos=grid_pos)
+    grid = persistent_map.get_map()
 
-        if len(changed_vertices.vertices) > 0:
-            print(f"New obstacles at step {step_idx}, replanning...")
-            path, g, rhs = planner.move_and_replan(robot_position=grid_pos)
-            max_steps = len(path) * 3  # update limit for new path
-            step_idx = 0
-        else:
-            step_idx += 1
-
-        steps_taken += 1
-
-    grid = truth_map.get_map() # get final grid for visualization
-
-    # Visualize occupancy map and path
+    # Visualize occupancy map and path history
     print("\nVisualizing results...")
-    path_np = np.array(path)
+    path_np = np.array(final_path) if final_path else np.empty((0, 2), dtype=int)
+    traveled_np = np.array(traveled_path) if traveled_path else np.empty((0, 2), dtype=int)
 
     plt.figure(figsize=(8, 6))
     plt.imshow(grid, cmap="gray_r")
 
-    # plot path
-    plt.plot(path_np[:, 0], path_np[:, 1], "r-", linewidth=2, label="Path")
+    # plot latest planned path (x=col, y=row)
+    if len(path_np) > 0:
+        plt.plot(path_np[:, 1], path_np[:, 0], "r--", linewidth=2, label="Planned Path")
 
-    # plot start and goal
-    plt.scatter(path_np[0, 0], path_np[0, 1], c="green", s=80, label="Start")
-    plt.scatter(path_np[-1, 0], path_np[-1, 1], c="blue", s=80, label="Goal")
+    # plot traveled trajectory (x=col, y=row)
+    if len(traveled_np) > 0:
+        plt.plot(traveled_np[:, 1], traveled_np[:, 0], "g-", linewidth=2, label="Traveled")
+        plt.scatter(traveled_np[0, 1], traveled_np[0, 0], c="green", s=80, label="Start")
+        plt.scatter(traveled_np[-1, 1], traveled_np[-1, 0], c="blue", s=80, label="Current")
 
-    plt.title("Occupancy Grid + Planned Path")
-    plt.xlabel("X (grid)")
-    plt.ylabel("Y (grid)")
+    plt.title("Occupancy Grid + Scan/Plan Loop")
+    plt.xlabel("X (col)")
+    plt.ylabel("Y (row)")
     plt.gca().invert_yaxis()
     plt.legend()
     plt.tight_layout()
     plt.show()
 
-    
-    # Print path
     print("\nNavigation Complete.")
-    print(f"Path length: {len(path)}")
-    print("Path:")
-    for step in path:
+    print(f"Final path length: {len(final_path)}")
+    print("Final path:")
+    for step in final_path:
         print(step)
 
 

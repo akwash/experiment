@@ -54,3 +54,8 @@ sampling:
   num_layers: 4
   sub_sampling_ratio: [4, 4, 4, 4]
   d_out: [16, 64, 128, 256]
+
+  debug:
+  enabled: true
+  host: "127.0.0.1" # localhost ip address
+  port: 9876 # default port for JSON sender

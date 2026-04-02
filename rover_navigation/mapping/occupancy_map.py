@@ -342,30 +342,24 @@ def visualize_empty_grid(omap):
     plt.title("Grid")
     plt.show()
 
-def transform_to_world(
+def sensor_to_rover_local(
     points: np.ndarray,
-    rover_pose_xy: tuple[float, float],
-    heading_rad: float,
     lidar_to_body_rotation: np.ndarray | None = None,
     lidar_to_body_translation: np.ndarray | None = None,
 ) -> np.ndarray:
     """
-    Transform LiDAR-frame points into world frame.
-
-    Frame pipeline:
-      lidar -> body -> world
+    Transform Ouster sensor-frame points into rover-local frame.
 
     Conventions used here:
       - Ouster LiDAR frame: +X forward, +Y left, +Z up
-      - world frame: +X right, +Y forward, +Z up
-      - heading_rad is rover yaw in radians, positive CCW in world XY
+      - rover local frame: +X right, +Y forward, +Z up
       - points are row vectors with shape (N, 3)
 
     Defaults:
       - lidar_to_body_rotation is non-identity and maps Ouster LiDAR axes to body axes:
-          x_body = -y_lidar
-          y_body =  x_lidar
-          z_body =  z_lidar
+          x_local = -y_sensor
+          y_local =  x_sensor
+          z_local =  z_sensor
       - lidar_to_body_translation is zero (sensor origin at body origin)
     """
     if points.ndim != 2 or points.shape[1] != 3:
@@ -394,7 +388,27 @@ def transform_to_world(
             f"Expected lidar_to_body_translation shape (3,), got {lidar_to_body_translation.shape}"
         )
 
-    # Rotate body frame in world plane by heading.
+    local_points = points @ lidar_to_body_rotation.T + lidar_to_body_translation
+    return local_points.astype(np.float32, copy=False)
+
+
+def transform_local_to_world(
+    local_points: np.ndarray,
+    rover_pose_xy: tuple[float, float],
+    heading_rad: float,
+) -> np.ndarray:
+    """
+    Transform rover-local points into world/global frame.
+
+    Conventions:
+      - rover local frame: +X right, +Y forward, +Z up
+      - world frame: +X right, +Y forward, +Z up
+      - heading_rad is rover yaw in radians, positive CCW in world XY
+      - world origin is at the bottom-left of the square workspace
+    """
+    if local_points.ndim != 2 or local_points.shape[1] != 3:
+        raise ValueError(f"Expected local_points shape (N, 3), got {local_points.shape}")
+
     cos_h = np.cos(heading_rad)
     sin_h = np.sin(heading_rad)
     world_from_body = np.array(
@@ -406,11 +420,32 @@ def transform_to_world(
         dtype=np.float32,
     )
 
-    body_points = points @ lidar_to_body_rotation.T + lidar_to_body_translation
-    world_points = body_points @ world_from_body.T
+    world_points = local_points @ world_from_body.T
     world_points[:, 0] += rover_pose_xy[0]
     world_points[:, 1] += rover_pose_xy[1]
     return world_points.astype(np.float32, copy=False)
+
+
+def transform_to_world(
+    points: np.ndarray,
+    rover_pose_xy: tuple[float, float],
+    heading_rad: float,
+    lidar_to_body_rotation: np.ndarray | None = None,
+    lidar_to_body_translation: np.ndarray | None = None,
+) -> np.ndarray:
+    """
+    Backward-compatible wrapper for sensor -> local -> world transform.
+    """
+    local_points = sensor_to_rover_local(
+        points=points,
+        lidar_to_body_rotation=lidar_to_body_rotation,
+        lidar_to_body_translation=lidar_to_body_translation,
+    )
+    return transform_local_to_world(
+        local_points=local_points,
+        rover_pose_xy=rover_pose_xy,
+        heading_rad=heading_rad,
+    )
 
 if __name__ == "__main__":
     # create a test map
