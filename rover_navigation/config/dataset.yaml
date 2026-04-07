@@ -25,7 +25,7 @@ paths:
   # scan_mode: file     -> use test_file (single csv/ply or directory of scans)
   # scan_mode: numpy    -> use numpy_scan or numpy_scan_dir (.npy / .npz with xyz or points)
   # scan_mode: function -> call paths.function_provider each cycle to get an (N,3) numpy array
-  scan_mode: file
+  scan_mode: function
   # When test_file is a directory, which files to include (default: csv only for backward compat)
   scan_glob: "*.csv"
   # numpy_mode examples (set scan_mode: numpy):
