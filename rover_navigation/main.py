@@ -12,6 +12,7 @@
 # 7. Rover navigation
 
 from pathlib import Path
+import importlib
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -128,13 +129,47 @@ def load_numpy_scan_sequence(paths_cfg: dict) -> list[tuple[np.ndarray, str]]:
     return out
 
 
-def resolve_scans(dataset_cfg: dict) -> list[tuple[str, Path | np.ndarray, str]]:
+def load_function_scan_provider(paths_cfg: dict) -> tuple[object, str, int]:
+    """
+    Load a callable provider that returns one XYZ scan array per call.
+
+    Config:
+      paths:
+        function_provider: "my_module.my_file:my_scan_function"
+        function_scan_cycles: 10
+    """
+    provider_ref = paths_cfg.get("function_provider")
+    if not provider_ref:
+        raise ValueError("scan_mode function requires paths.function_provider")
+
+    if ":" not in str(provider_ref):
+        raise ValueError(
+            "paths.function_provider must be 'module.path:function_name'"
+        )
+
+    module_name, func_name = str(provider_ref).split(":", maxsplit=1)
+    module = importlib.import_module(module_name)
+    provider = getattr(module, func_name, None)
+    if provider is None or not callable(provider):
+        raise ValueError(
+            f"Function provider '{provider_ref}' not found or not callable."
+        )
+
+    scan_cycles = int(paths_cfg.get("function_scan_cycles", 1))
+    if scan_cycles < 1:
+        raise ValueError("paths.function_scan_cycles must be >= 1")
+
+    return provider, str(provider_ref), scan_cycles
+
+
+def resolve_scans(dataset_cfg: dict) -> list[tuple[str, object, str]]:
     """
     Decide how to load scans from ``dataset_cfg['paths']``.
 
     Returns a list of (kind, payload, label) where:
       - kind ``file``: payload is a Path to csv/ply for :func:`run_inference`
       - kind ``numpy``: payload is (N,3) float32 for :func:`run_inference_from_xyz`
+      - kind ``function``: payload is a callable returning (N,3) xyz per cycle
     """
     paths_cfg = dataset_cfg["paths"] # config block for path
     mode = str(paths_cfg.get("scan_mode", "file")).lower() # mode for loading scans
@@ -144,6 +179,10 @@ def resolve_scans(dataset_cfg: dict) -> list[tuple[str, Path | np.ndarray, str]]
             ("numpy", xyz, label) for xyz, label in load_numpy_scan_sequence(paths_cfg)
         ]
 
+    if mode == "function":
+        provider, provider_label, scan_cycles = load_function_scan_provider(paths_cfg)
+        return [("function", provider, provider_label) for _ in range(scan_cycles)]
+
     if mode == "file":
         scan_glob = str(paths_cfg.get("scan_glob", "*.csv"))
         test_file = paths_cfg.get("test_file")
@@ -152,7 +191,9 @@ def resolve_scans(dataset_cfg: dict) -> list[tuple[str, Path | np.ndarray, str]]
         file_paths = load_file_scan_sequence(test_file, scan_glob=scan_glob)
         return [("file", p, str(p)) for p in file_paths]
 
-    raise ValueError(f"Unknown paths.scan_mode: {mode!r} (use 'file' or 'numpy')")
+    raise ValueError(
+        f"Unknown paths.scan_mode: {mode!r} (use 'file', 'numpy', or 'function')"
+    )
 
 
 def fuse_scan_into_global_map(
@@ -276,6 +317,11 @@ def main() -> None:
             points_sensor, _true_labels, pred_labels = run_inference_from_xyz(
                 scan_payload
             )
+        elif scan_kind == "function":
+            # First-pass operator interface for live in-memory scans:
+            # provider callable returns one (N,3) xyz array per planning cycle.
+            xyz = scan_payload()
+            points_sensor, _true_labels, pred_labels = run_inference_from_xyz(xyz)
         else:
             raise RuntimeError(f"Unknown scan kind: {scan_kind}")
 

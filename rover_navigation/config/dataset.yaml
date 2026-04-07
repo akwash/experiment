@@ -22,8 +22,9 @@ paths:
   # this is if using the ply:
   # test_file: "rover_navigation/data/raw/pos1_2box.ply"
   test_file: "rover_navigation/data/raw/BigObstacles_pos3_High.csv"
-  # scan_mode: file  -> use test_file (single csv/ply or directory of scans)
-  # scan_mode: numpy -> use numpy_scan or numpy_scan_dir (.npy / .npz with xyz or points)
+  # scan_mode: file     -> use test_file (single csv/ply or directory of scans)
+  # scan_mode: numpy    -> use numpy_scan or numpy_scan_dir (.npy / .npz with xyz or points)
+  # scan_mode: function -> call paths.function_provider each cycle to get an (N,3) numpy array
   scan_mode: file
   # When test_file is a directory, which files to include (default: csv only for backward compat)
   scan_glob: "*.csv"
@@ -34,6 +35,11 @@ paths:
   numpy_scan: null
   numpy_scan_dir: null
   numpy_scan_glob: "*.npy"
+  # function_mode examples (set scan_mode: function):
+  # function_provider: "rover_navigation.rover.scan_source:get_latest_scan_xyz"
+  # function_scan_cycles: 50
+  function_provider: null
+  function_scan_cycles: 1
 
 point_cloud:
   # this is if using the ply:
